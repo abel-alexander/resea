@@ -1,56 +1,54 @@
-import pdfplumber
 import pandas as pd
-from collections import Counter
-import re
+import openpyxl
+from openpyxl.styles import PatternFill
+import glob
 
 
-def extract_company_sections(pdf_path):
-    sections = []
-    with pdfplumber.open(pdf_path) as pdf:
-        full_text = ""
-        for page in pdf.pages:
-            text = page.extract_text()
-            if text:
-                full_text += text + "\n"
-
-        # Assuming each company section starts with "Company Report" and ends before the next starts
-        parts = full_text.split("Company Report")[1:]  # Skip the first split before the first header
-        for part in parts:
-            end = part.find("End of Company Report")  # Each section ends with this text
-            sections.append(part[:end])
-    return sections
+def is_cell_green(cell):
+    """Check if a cell is filled with green color."""
+    if cell.fill.start_color.index == '00000000' and cell.fill.end_color.index == '00000000':
+        return False
+    green_color = 'FF00FF00'  # Hex code for green color
+    return cell.fill.start_color.index == green_color or cell.fill.end_color.index == green_color
 
 
-def count_keywords(text, keywords):
-    words = re.findall(r'\b\w+\b', text.lower())
-    counter = Counter(words)
-    return {keyword: counter.get(keyword, 0) for keyword in keywords}
+def compile_data(file_paths):
+    """Compile data from multiple Excel files into two separate DataFrames based on 'Keep' column color."""
+    df_green = pd.DataFrame(columns=['Keyword', 'Frequency', 'Keep'])
+    df_not_green = pd.DataFrame(columns=['Keyword', 'Frequency', 'Keep'])
+
+    for file_path in file_paths:
+        workbook = openpyxl.load_workbook(file_path)
+        sheet = workbook.active
+
+        for row in sheet.iter_rows(min_row=2, values_only=False):  # Assuming the first row is header
+            keyword = row[0].value
+            frequency = row[1].value
+            keep = row[2].value
+            cell = row[2]
+
+            row_data = {'Keyword': keyword, 'Frequency': frequency, 'Keep': keep}
+
+            if is_cell_green(cell):
+                df_green = df_green.append(row_data, ignore_index=True)
+            else:
+                df_not_green = df_not_green.append(row_data, ignore_index=True)
+
+    return df_green, df_not_green
 
 
-def process_pdf(pdf_path, keywords):
-    sections = extract_company_sections(pdf_path)
-    results = []
-    for section in sections:
-        keyword_counts = count_keywords(section, keywords)
-        results.append(keyword_counts)
-    return results
+# Define the path to your Excel files (e.g., using glob to find all Excel files in a directory)
+file_paths = glob.glob("path_to_your_excel_files/*.xlsx")
 
+# Compile the data
+df_green, df_not_green = compile_data(file_paths)
 
-# Define your keywords
-keywords = ["investment", "market", "growth", "risk", "profit"]
+# Print the results or save them to a new Excel file
+print("DataFrame with green 'Keep' cells:")
+print(df_green)
+print("\nDataFrame without green 'Keep' cells:")
+print(df_not_green)
 
-# Paths to your PDFs
-pdf_paths = ["pib1.pdf"]#, "pib2.pdf", "pib3.pdf", "pib4.pdf", "pib5.pdf", "pib6.pdf"]
-
-for index, path in enumerate(pdf_paths):
-    results = process_pdf(path, keywords)
-    with pd.ExcelWriter(f"{path[:-4]}_keyword_frequency.xlsx") as writer:
-        for i, result in enumerate(results):
-            df = pd.DataFrame([result])
-            df.index = [f"Company {i + 1}"]
-            df.to_excel(writer, sheet_name=f"Company {i + 1}")
-
-        # Concatenate all results for summary sheet
-        concatenated_df = pd.concat([pd.DataFrame([res]) for res in results], ignore_index=True)
-        concatenated_df.to_excel(writer, sheet_name="Concatenated Summary")
-
+# Optionally, save to new Excel files
+df_green.to_excel("green_keep.xlsx", index=False)
+df_not_green.to_excel("not_green_keep.xlsx", index=False)
