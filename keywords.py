@@ -7,16 +7,22 @@ import glob
 def is_cell_green(cell):
     """Check if a cell is filled with a specific green color (FF00B050)."""
     fill = cell.fill
+    print(f"Debug: cell fill: {fill}")
     if isinstance(fill, PatternFill):
+        print("Debug: fill is a PatternFill")
         if fill.fgColor and fill.fgColor.rgb:
             color = fill.fgColor.rgb
+            print(f"Debug: fgColor.rgb = {color}")
         elif fill.bgColor and fill.bgColor.rgb:
             color = fill.bgColor.rgb
+            print(f"Debug: bgColor.rgb = {color}")
         else:
+            print("Debug: No valid color found")
             return False
 
         # Check if the color matches the specific green color code
         return color == 'FF00B050'
+    print("Debug: fill is not a PatternFill")
     return False
 
 
