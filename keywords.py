@@ -5,15 +5,18 @@ import glob
 
 
 def is_cell_green(cell):
-    """Check if a cell is filled with green color."""
+    """Check if a cell is filled with a specific green color (FF00B050)."""
     fill = cell.fill
-    if isinstance(fill, PatternFill) and fill.fgColor:
-        color = fill.fgColor.rgb
-        if color is None:
+    if isinstance(fill, PatternFill):
+        if fill.fgColor and fill.fgColor.rgb:
+            color = fill.fgColor.rgb
+        elif fill.bgColor and fill.bgColor.rgb:
             color = fill.bgColor.rgb
-        if color:
-            color = color[-6:]  # Extract the RGB part (ignore alpha if present)
-            return color.lower() == '00ff00'  # Hex code for green color
+        else:
+            return False
+
+        # Check if the color matches the specific green color code
+        return color == 'FF00B050'
     return False
 
 
