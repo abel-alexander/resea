@@ -6,16 +6,21 @@ import glob
 
 def is_cell_green(cell):
     """Check if a cell is filled with green color."""
-    if cell.fill.start_color.index == '00000000' and cell.fill.end_color.index == '00000000':
-        return False
-    green_color = 'FF00FF00'  # Hex code for green color
-    return cell.fill.start_color.index == green_color or cell.fill.end_color.index == green_color
+    fill = cell.fill
+    if isinstance(fill, PatternFill) and fill.fgColor:
+        color = fill.fgColor.rgb
+        if color is None:
+            color = fill.bgColor.rgb
+        if color:
+            color = color[-6:]  # Extract the RGB part (ignore alpha if present)
+            return color.lower() == '00ff00'  # Hex code for green color
+    return False
 
 
 def compile_data(file_paths):
     """Compile data from multiple Excel files into two separate DataFrames based on 'Keep' column color."""
-    df_green = pd.DataFrame(columns=['Keyword', 'Frequency', 'Keep'])
-    df_not_green = pd.DataFrame(columns=['Keyword', 'Frequency', 'Keep'])
+    df_green_list = []
+    df_not_green_list = []
 
     for file_path in file_paths:
         workbook = openpyxl.load_workbook(file_path)
@@ -30,9 +35,12 @@ def compile_data(file_paths):
             row_data = {'Keyword': keyword, 'Frequency': frequency, 'Keep': keep}
 
             if is_cell_green(cell):
-                df_green = df_green.append(row_data, ignore_index=True)
+                df_green_list.append(row_data)
             else:
-                df_not_green = df_not_green.append(row_data, ignore_index=True)
+                df_not_green_list.append(row_data)
+
+    df_green = pd.DataFrame(df_green_list)
+    df_not_green = pd.DataFrame(df_not_green_list)
 
     return df_green, df_not_green
 
