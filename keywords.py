@@ -29,6 +29,12 @@ def aggregate_frequencies(df):
     return df.groupby('Keyword', as_index=False).agg({'Frequency': 'sum'})
 
 
+def remove_common_keywords(df1, df2):
+    """Remove rows from df2 that have keywords present in df1."""
+    common_keywords = set(df1['Keyword'])
+    return df2[~df2['Keyword'].isin(common_keywords)]
+
+
 # Define the path to your Excel files (e.g., using glob to find all Excel files in a directory)
 file_paths = glob.glob("path_to_your_excel_files/*.xlsx")
 
@@ -39,10 +45,13 @@ df_green, df_not_green = compile_data(file_paths)
 df_green_aggregated = aggregate_frequencies(df_green)
 df_not_green_aggregated = aggregate_frequencies(df_not_green)
 
+# Remove common keywords from no_keep_aggregated
+df_not_green_aggregated = remove_common_keywords(df_green_aggregated, df_not_green_aggregated)
+
 # Print the results or save them to a new Excel file
 print("Aggregated DataFrame with 'Yes' in 'Keep' column:")
 print(df_green_aggregated)
-print("\nAggregated DataFrame without 'Yes' in 'Keep' column:")
+print("\nAggregated DataFrame without 'Yes' in 'Keep' column (after removing common keywords):")
 print(df_not_green_aggregated)
 
 # Optionally, save to new Excel files
