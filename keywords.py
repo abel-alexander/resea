@@ -1,59 +1,46 @@
 import pandas as pd
-import glob
+from fpdf import FPDF
 
+def save_sheet_as_pdf(excel_file, sheet_name, output_pdf):
+    # Read the sheet into a DataFrame
+    df = pd.read_excel(excel_file, sheet_name=sheet_name)
+    
+    # Create a PDF object in landscape mode
+    pdf = FPDF(orientation='L', unit='mm', format='A4')
+    pdf.add_page()
+    
+    # Set font
+    pdf.set_font("Arial", size=12)
+    
+    # Calculate column widths
+    col_widths = pdf.w / len(df.columns)
+    
+    # Add header
+    for col_name in df.columns:
+        pdf.cell(col_widths, 10, col_name, border=1)
+    pdf.ln()
+    
+    # Add rows
+    for row in df.itertuples(index=False, name=None):
+        for cell in row:
+            pdf.cell(col_widths, 10, str(cell), border=1)
+        pdf.ln()
+    
+    # Save the PDF
+    pdf.output(output_pdf)
 
-def compile_data(file_paths):
-    """Compile data from multiple Excel files into two separate DataFrames based on 'Keep' column value."""
-    df_green_list = []
-    df_not_green_list = []
+def convert_excel_to_pdf(excel_file):
+    # Load the Excel file
+    xls = pd.ExcelFile(excel_file)
+    
+    # Iterate through each sheet and save as PDF
+    for sheet_name in xls.sheet_names:
+        output_pdf = f"{sheet_name}.pdf"
+        save_sheet_as_pdf(excel_file, sheet_name, output_pdf)
+        print(f"Saved {sheet_name} as {output_pdf}")
 
-    for file_path in file_paths:
-        df = pd.read_excel(file_path)
+# Path to your Excel file
+excel_file = 'your_excel_file.xlsx'
 
-        for _, row in df.iterrows():
-            row_data = {'Keyword': row['Keyword'], 'Frequency': row['Frequency'], 'Keep': row['Keep']}
-
-            if row['Keep'] == 'Yes':
-                df_green_list.append(row_data)
-            else:
-                df_not_green_list.append(row_data)
-
-    df_green = pd.DataFrame(df_green_list)
-    df_not_green = pd.DataFrame(df_not_green_list)
-
-    return df_green, df_not_green
-
-
-def aggregate_frequencies(df):
-    """Aggregate frequency values for rows with the same keyword."""
-    return df.groupby('Keyword', as_index=False).agg({'Frequency': 'sum'})
-
-
-def remove_common_keywords(df1, df2):
-    """Remove rows from df2 that have keywords present in df1."""
-    common_keywords = set(df1['Keyword'])
-    return df2[~df2['Keyword'].isin(common_keywords)]
-
-
-# Define the path to your Excel files (e.g., using glob to find all Excel files in a directory)
-file_paths = glob.glob("path_to_your_excel_files/*.xlsx")
-
-# Compile the data
-df_green, df_not_green = compile_data(file_paths)
-
-# Aggregate frequencies
-df_green_aggregated = aggregate_frequencies(df_green)
-df_not_green_aggregated = aggregate_frequencies(df_not_green)
-
-# Remove common keywords from no_keep_aggregated
-df_not_green_aggregated = remove_common_keywords(df_green_aggregated, df_not_green_aggregated)
-
-# Print the results or save them to a new Excel file
-print("Aggregated DataFrame with 'Yes' in 'Keep' column:")
-print(df_green_aggregated)
-print("\nAggregated DataFrame without 'Yes' in 'Keep' column (after removing common keywords):")
-print(df_not_green_aggregated)
-
-# Optionally, save to new Excel files
-df_green_aggregated.to_excel("yes_keep_aggregated.xlsx", index=False)
-df_not_green_aggregated.to_excel("no_keep_aggregated.xlsx", index=False)
+# Convert Excel sheets to PDF
+convert_excel_to_pdf(excel_file)
