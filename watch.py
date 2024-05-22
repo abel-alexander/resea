@@ -1,46 +1,40 @@
-import time
-import os
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
-import subprocess
+import pandas as pd
+from rouge_score import rouge_scorer, scoring
 
-class Watcher:
-    DIRECTORY_TO_WATCH = "/path/to/your/directory"
+# Load the Excel file
+file_path = '/mnt/data/your_excel_file.xlsx'
+df = pd.read_excel(file_path)
 
-    def __init__(self):
-        self.observer = Observer()
+# Initialize the ROUGE scorer
+scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougel'], use_stemmer=True)
+aggregator = scoring.BootstrapAggregator()
 
-    def run(self):
-        event_handler = Handler()
-        self.observer.schedule(event_handler, self.DIRECTORY_TO_WATCH, recursive=True)
-        self.observer.start()
-        try:
-            while True:
-                time.sleep(5)
-        except:
-            self.observer.stop()
-            print("Observer Stopped")
+# Function to compute ROUGE scores
+def compute_rouge_scores(gen_text, ref_text):
+    scores = scorer.score(gen_text, ref_text)
+    return {
+        'rouge1_recall': scores['rouge1'].recall,
+        'rouge1_precision': scores['rouge1'].precision,
+        'rouge1_fmeasure': scores['rouge1'].fmeasure,
+        'rouge2_recall': scores['rouge2'].recall,
+        'rouge2_precision': scores['rouge2'].precision,
+        'rouge2_fmeasure': scores['rouge2'].fmeasure,
+        'rougel_recall': scores['rougel'].recall,
+        'rougel_precision': scores['rougel'].precision,
+        'rougel_fmeasure': scores['rougel'].fmeasure
+    }
 
-        self.observer.join()
+# Apply the function to each row
+df_scores = df.apply(lambda row: compute_rouge_scores(row['generated_text'], row['reference_text']), axis=1)
 
+# Convert the resulting Series of dictionaries to a DataFrame
+df_scores = pd.DataFrame(df_scores.tolist())
 
-class Handler(FileSystemEventHandler):
+# Concatenate the original DataFrame with the ROUGE scores DataFrame
+df_result = pd.concat([df, df_scores], axis=1)
 
-    @staticmethod
-    def on_any_event(event):
-        if event.is_directory:
-            return None
+# Save the updated DataFrame back to an Excel file
+output_file_path = '/mnt/data/your_output_file.xlsx'
+df_result.to_excel(output_file_path, index=False)
 
-        elif event.event_type == 'created':
-            # Take action when a file is created.
-            print(f"Received created event - {event.src_path}.")
-            # Run Alteryx workflow
-            workflow_path = "/path/to/your/alteryx_workflow.yxmd"
-            subprocess.run(['AlteryxEngineCmd.exe', workflow_path, event.src_path])
-            # Delete the file
-            os.remove(event.src_path)
-            print(f"File {event.src_path} deleted after processing.")
-
-if __name__ == '__main__':
-    w = Watcher()
-    w.run()
+print(f"ROUGE scores have been computed and saved to {output_file_path}")
