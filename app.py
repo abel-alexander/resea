@@ -2,7 +2,7 @@ import pandas as pd
 import re
 from word2number import w2n
 
-# Example data including empty rows
+# Example data including empty rows and non-string values
 data = {
     'text': [
         'twenty four, 2024, 24, 2024', 
@@ -10,7 +10,8 @@ data = {
         '2024-2025, twenty twenty-five',
         '',
         None,
-        'twenty twenty-four'
+        'twenty twenty-four',
+        2024
     ]
 }
 
@@ -18,7 +19,7 @@ df = pd.DataFrame(data)
 
 # Function to standardize and extract years
 def extract_years(text):
-    if not text or text.strip() == '':
+    if not isinstance(text, str) or text.strip() == '':
         return []
     
     # Replace written numbers with digits
