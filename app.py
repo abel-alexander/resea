@@ -46,6 +46,16 @@ def extract_years(text):
 df['unique_years'] = df['text'].apply(extract_years)
 df['unique_year_counts'] = df['unique_years'].apply(lambda x: {year: x.count(year) for year in set(x)} if x else {})
 
+
+# Aggregate counts for each year
+aggregate_counts = defaultdict(int)
+for count_dict in df['unique_year_counts']:
+    for year, count in count_dict.items():
+        aggregate_counts[year] += count
+
+# Convert the aggregate counts to a DataFrame
+year_df = pd.DataFrame(list(aggregate_counts.items()), columns=['Year', 'Frequency'])
+
 # Display the dataframe
 import ace_tools as tools; tools.display_dataframe_to_user(name="Year Counts", dataframe=df)
 
