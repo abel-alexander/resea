@@ -2,12 +2,15 @@ import pandas as pd
 import re
 from word2number import w2n
 
-# Example data
+# Example data including empty rows
 data = {
     'text': [
         'twenty four, 2024, 24, 2024', 
         '2025, twenty five, 25, 25-26',
-        '2024-2025, twenty twenty-five'
+        '2024-2025, twenty twenty-five',
+        '',
+        None,
+        'twenty twenty-four'
     ]
 }
 
@@ -15,6 +18,9 @@ df = pd.DataFrame(data)
 
 # Function to standardize and extract years
 def extract_years(text):
+    if not text or text.strip() == '':
+        return []
+    
     # Replace written numbers with digits
     for word in text.split():
         try:
@@ -37,7 +43,7 @@ def extract_years(text):
 
 # Apply the function and count unique years
 df['unique_years'] = df['text'].apply(extract_years)
-df['unique_year_counts'] = df['unique_years'].apply(lambda x: {year: x.count(year) for year in set(x)})
+df['unique_year_counts'] = df['unique_years'].apply(lambda x: {year: x.count(year) for year in set(x)} if x else {})
 
 # Display the dataframe
 import ace_tools as tools; tools.display_dataframe_to_user(name="Year Counts", dataframe=df)
