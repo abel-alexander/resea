@@ -75,3 +75,51 @@ plt.ylabel('Frequency')
 plt.title('Year Counts')
 plt.xticks(rotation=45)
 plt.show()
+
+
+
+
+import pandas as pd
+
+# Sample DataFrame
+data = {
+    'Interested in P': ['Yes', 'No', 'I am interested in P, yes', 'no, not interested', 'Absolutely yes!'],
+    'Interested in M': ['No', 'Yes', 'Maybe, yes', 'No thanks', 'Sure, yes']
+}
+
+df = pd.DataFrame(data)
+
+# Function to check for 'yes' or 'no'
+def check_interest(text):
+    if isinstance(text, str):
+        text_lower = text.lower()
+        if 'yes' in text_lower:
+            return 'yes'
+        elif 'no' in text_lower:
+            return 'no'
+    return 'undecided'
+
+# Apply the function to each relevant column
+df['P_Interest'] = df['Interested in P'].apply(check_interest)
+df['M_Interest'] = df['Interested in M'].apply(check_interest)
+
+# Count the occurrences of 'yes' and 'no'
+p_interest_counts = df['P_Interest'].value_counts()
+m_interest_counts = df['M_Interest'].value_counts()
+
+# Display the counts
+print("P Interest Counts:")
+print(p_interest_counts)
+
+print("\nM Interest Counts:")
+print(m_interest_counts)
+
+# Combine counts into a single DataFrame for better visualization
+interest_counts_df = pd.DataFrame({
+    'Interested in P': p_interest_counts,
+    'Interested in M': m_interest_counts
+}).fillna(0).astype(int)  # Fill NaN with 0 and convert to int
+
+# Display the combined counts DataFrame
+print("\nCombined Interest Counts DataFrame:")
+print(interest_counts_df)
