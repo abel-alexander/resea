@@ -18,11 +18,13 @@ data = {
 
 df = pd.DataFrame(data)
 
-# Function to standardize and extract years
 def extract_years(text):
-    if not isinstance(text, str) or text.strip() == '':
-        return []
+    if not isinstance(text, str):
+        text = str(text)  # Convert non-string to string
     
+    if text.strip() == '':
+        return []
+
     # Replace written numbers with digits
     words = text.split()
     normalized_text = text
@@ -44,6 +46,8 @@ def extract_years(text):
             year_set.add(str(2000 + int(pattern)))  # Convert to string and add to set
 
     return list(year_set)  # Returning unique occurrences
+
+
 
 # Apply the function and count unique years
 df['unique_years'] = df['text'].apply(extract_years)
