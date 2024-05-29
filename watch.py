@@ -16,17 +16,19 @@ def write_dfs_with_charts_to_excel(file_path, dfs_sheet_names_charts_titles_colo
             # Create a clustered column chart
             chart = workbook.add_chart({'type': 'column'})
 
-            for i, feedback in enumerate(df_sorted['Valuation Feedback'].unique()):
-                column_letter = chr(67 + i)  # Adjust to start from column C
-                color = 'navy' if feedback == 'Yes' else 'red'
-                feedback_data = df_sorted[df_sorted['Valuation Feedback'] == feedback]
-                chart.add_series({
-                    'name': feedback,
-                    'categories': f"='{sheet_name}'!$A$2:$A${len(df_sorted) + 1}",
-                    'values': f"='{sheet_name}'!${column_letter}$2:${column_letter}${len(feedback_data) + 1}",
-                    'fill': {'color': color},
-                    'data_labels': {'value': True, 'position': 'outside_end'},
-                })
+            banks = df_sorted['Bank'].unique()
+            for bank in banks:
+                for feedback in ['Yes', 'No']:
+                    feedback_data = df_sorted[(df_sorted['Bank'] == bank) & (df_sorted['Valuation Feedback'] == feedback)]
+                    if not feedback_data.empty:
+                        color = 'navy' if feedback == 'Yes' else 'red'
+                        chart.add_series({
+                            'name': f"{bank} - {feedback}",
+                            'categories': f"='{sheet_name}'!$A$2:$A${len(df_sorted) + 1}",
+                            'values': f"='{sheet_name}'!$C${feedback_data.index[0] + 2}:$C${feedback_data.index[0] + 2}",
+                            'fill': {'color': color},
+                            'data_labels': {'value': True, 'position': 'outside_end'},
+                        })
 
             chart.set_chartarea({'fill': {'none': True}, 'border': {'none': True}})
             chart.set_plotarea({'fill': {'none': True}})
@@ -34,7 +36,7 @@ def write_dfs_with_charts_to_excel(file_path, dfs_sheet_names_charts_titles_colo
             chart.set_y_axis({'visible': False, 'major_gridlines': {'visible': False}})
             chart.set_legend({'none': True})
 
-            worksheet.insert_chart('G2', chart)
+            worksheet.insert_chart('E2', chart)
 
     excel_writer.save()
 
