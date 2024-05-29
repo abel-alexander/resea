@@ -1,40 +1,49 @@
 import pandas as pd
-from rouge_score import rouge_scorer, scoring
+import xlsxwriter
 
-# Load the Excel file
-file_path = '/mnt/data/your_excel_file.xlsx'
-df = pd.read_excel(file_path)
+def write_dfs_with_charts_to_excel(file_path, dfs_sheet_names_charts_titles_colors):
+    excel_writer = pd.ExcelWriter(file_path, engine='xlsxwriter')
+    workbook = excel_writer.book
 
-# Initialize the ROUGE scorer
-scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougel'], use_stemmer=True)
-aggregator = scoring.BootstrapAggregator()
+    for df, sheet_name, chart_type, chart_title, _ in dfs_sheet_names_charts_titles_colors:
+        df.to_excel(excel_writer, sheet_name=sheet_name, startrow=1, index=False)
+        worksheet = excel_writer.sheets[sheet_name]
 
-# Function to compute ROUGE scores
-def compute_rouge_scores(gen_text, ref_text):
-    scores = scorer.score(gen_text, ref_text)
-    return {
-        'rouge1_recall': scores['rouge1'].recall,
-        'rouge1_precision': scores['rouge1'].precision,
-        'rouge1_fmeasure': scores['rouge1'].fmeasure,
-        'rouge2_recall': scores['rouge2'].recall,
-        'rouge2_precision': scores['rouge2'].precision,
-        'rouge2_fmeasure': scores['rouge2'].fmeasure,
-        'rougel_recall': scores['rougel'].recall,
-        'rougel_precision': scores['rougel'].precision,
-        'rougel_fmeasure': scores['rougel'].fmeasure
-    }
+        if chart_type == 'stacked':
+            df_sorted = df.sort_values(by='total_count', ascending=False)
+            pivot = df_sorted.pivot_table(index='Bank', columns='Valuation Feedback', values=['count', 'total_count'], aggfunc='sum').fillna(0)
+            print(df_sorted)
 
-# Apply the function to each row
-df_scores = df.apply(lambda row: compute_rouge_scores(row['generated_text'], row['reference_text']), axis=1)
+            df_sorted.to_excel(excel_writer, sheet_name=sheet_name, header=True, startrow=1, index=False)
 
-# Convert the resulting Series of dictionaries to a DataFrame
-df_scores = pd.DataFrame(df_scores.tolist())
+            # Create a stacked bar chart
+            chart = workbook.add_chart({'type': 'column', 'subtype': 'stacked'})
 
-# Concatenate the original DataFrame with the ROUGE scores DataFrame
-df_result = pd.concat([df, df_scores], axis=1)
+            for i, feedback in enumerate(df_sorted['Valuation Feedback'].unique()):
+                column_letter = chr(66 + i)
+                rows = df_sorted[df_sorted['Valuation Feedback'] == feedback].index
+                color = 'navy' if feedback == 'Yes' else 'red'
+                chart.add_series({
+                    'name': feedback,
+                    'categories': f"='{sheet_name}'!$A$2:$A${len(df_sorted) + 1}",
+                    'values': f"='{sheet_name}'!${column_letter}$2:${column_letter}${len(df_sorted) + 1}",
+                    'fill': {'color': color},
+                    'data_labels': {'value': True, 'position': 'outside_end'},
+                })
 
-# Save the updated DataFrame back to an Excel file
-output_file_path = '/mnt/data/your_output_file.xlsx'
-df_result.to_excel(output_file_path, index=False)
+            chart.set_chartarea({'fill': {'none': True}, 'border': {'none': True}})
+            chart.set_plotarea({'fill': {'none': True}})
+            chart.set_x_axis({'major_gridlines': {'visible': False}})
+            chart.set_y_axis({'visible': False, 'major_gridlines': {'visible': False}})
+            chart.set_legend({'none': True})
 
-print(f"ROUGE scores have been computed and saved to {output_file_path}")
+            worksheet.insert_chart('G2', chart)
+
+    excel_writer.save()
+
+# Example usage:
+dfs_sheet_names_charts_titles_colors = [
+    (df, 'Sheet1', 'stacked', 'Valuation Feedback', None)
+]
+
+write_dfs_with_charts_to_excel('output.xlsx', dfs_sheet_names_charts_titles_colors)
