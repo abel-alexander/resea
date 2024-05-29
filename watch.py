@@ -9,24 +9,21 @@ def write_dfs_with_charts_to_excel(file_path, dfs_sheet_names_charts_titles_colo
         df.to_excel(excel_writer, sheet_name=sheet_name, startrow=1, index=False)
         worksheet = excel_writer.sheets[sheet_name]
 
-        if chart_type == 'stacked':
+        if chart_type == 'clustered':
             df_sorted = df.sort_values(by='total_count', ascending=False)
-            pivot = df_sorted.pivot_table(index='Bank', columns='Valuation Feedback', values=['count', 'total_count'], aggfunc='sum').fillna(0)
-            print(df_sorted)
-
             df_sorted.to_excel(excel_writer, sheet_name=sheet_name, header=True, startrow=1, index=False)
 
-            # Create a stacked bar chart
-            chart = workbook.add_chart({'type': 'column', 'subtype': 'stacked'})
+            # Create a clustered column chart
+            chart = workbook.add_chart({'type': 'column'})
 
-            for i, feedback in enumerate(df_sorted['Valuation Feedback'].unique()):
-                column_letter = chr(66 + i)
-                rows = df_sorted[df_sorted['Valuation Feedback'] == feedback].index
+            feedback_types = df_sorted['Valuation Feedback'].unique()
+            for i, feedback in enumerate(feedback_types):
+                column_letter = chr(67 + i)  # Adjust to start from column C
                 color = 'navy' if feedback == 'Yes' else 'red'
                 chart.add_series({
                     'name': feedback,
                     'categories': f"='{sheet_name}'!$A$2:$A${len(df_sorted) + 1}",
-                    'values': f"='{sheet_name}'!${column_letter}$2:${column_letter}${len(df_sorted) + 1}",
+                    'values': f"='{sheet_name}'!$C$2:$C${len(df_sorted) + 1}" if feedback == 'Yes' else f"='{sheet_name}'!$D$2:$D${len(df_sorted) + 1}",
                     'fill': {'color': color},
                     'data_labels': {'value': True, 'position': 'outside_end'},
                 })
