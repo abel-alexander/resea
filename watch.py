@@ -29,7 +29,7 @@ def load_text_and_get_chunks(path_to_pdfs):
 
 ######################### Models #########################
 def load_llm():
-    hf_token = os.getenv("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")
+    hf_token = os.getenv("")
 
     # load the model with quantized features
     quantization_config = BitsAndBytesConfig(
