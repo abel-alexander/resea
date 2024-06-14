@@ -46,8 +46,10 @@ def main():
 
 def compare_columns(df1, df2, col1, col2, num_letters, threshold):
     results = pd.DataFrame(columns=[col1, 'Matched Value from Second Dataset', 'Matching Similarity', 'Matched Letters', 'Suggested Match', 'Suggested Matching Similarity'])
+    result_list = []  # Create an empty list to store result rows
 
     for name1 in df1[col1]:
+        name1 = str(name1).replace(" ", "")  # Convert to string and remove spaces
         best_match = None
         best_score = 0
         best_letters_matched = ""
@@ -56,25 +58,39 @@ def compare_columns(df1, df2, col1, col2, num_letters, threshold):
         second_best_letters_matched = ""
 
         for name2 in df2[col2]:
+            name2 = str(name2).replace(" ", "")  # Convert to string and remove spaces
             score = fuzz.ratio(name1, name2)
-            letters_matched = name1[:num_letters] if name1[:num_letters] == name2[:num_letters].replace(" ", "") else ""
-            if letters_matched and score >= threshold:
-                if score > best_score:
-                    best_score, best_match, best_letters_matched = score, name2, letters_matched
+            # Extract the substring of the required length from both strings, ensuring you do not exceed the string length
+            sub_name1 = name1[:min(num_letters, len(name1))]
+            sub_name2 = name2[:min(num_letters, len(name2))]
+
+            # Check if the substrings match
+            if sub_name1 == sub_name2:
+                letters_matched = sub_name1
+                if score >= threshold:
+                    if score > best_score:
+                        best_score, best_match, best_letters_matched = score, name2, letters_matched
+            else:
+                letters_matched = ""
 
             if score > second_best_score:
                 second_best_score, second_best_match, second_best_letters_matched = score, name2, letters_matched
 
-        results = results.append({
+        # Create a new row as a dictionary and append to the list
+        result_list.append({
             col1: name1,
             'Matched Value from Second Dataset': best_match,
             'Matching Similarity': best_score,
             'Matched Letters': best_letters_matched,
             'Suggested Match': second_best_match,
             'Suggested Matching Similarity': second_best_score
-        }, ignore_index=True)
+        })
+
+    # Convert the list of dicts to a DataFrame and concatenate with the main results DataFrame
+    results = pd.concat([results, pd.DataFrame(result_list)], ignore_index=True)
 
     return results
+
 
 def convert_df_to_excel(df):
     output = BytesIO()
