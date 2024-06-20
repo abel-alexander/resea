@@ -12,46 +12,61 @@ def extract_text_from_pdf(pdf_path, start_page, end_page):
     return text
 
 def save_text_to_file(text, folder, filename):
-    os.makedirs(folder, exist_ok=True)
+    if not os.path.exists(folder):
+        os.makedirs(folder)
     file_path = os.path.join(folder, filename)
     with open(file_path, 'w') as file:
         file.write(text)
 
-def process_pdfs(pdf_paths, page_ranges, section_name, folder_name):
-    for pdf_path in pdf_paths:
-        start_page, end_page = page_ranges
+def process_pdfs(pdf_paths_with_ranges, section_name):
+    folder = section_name.replace(" ", "_").lower()
+    for pdf_path, (start_page, end_page) in pdf_paths_with_ranges.items():
         text = extract_text_from_pdf(pdf_path, start_page, end_page)
         filename = f"{os.path.splitext(os.path.basename(pdf_path))[0]}_{section_name}.txt"
-        save_text_to_file(text, folder_name, filename)
+        save_text_to_file(text, folder, filename)
 
 def main():
-    # Define your PDF paths
-    pdf_paths = [
-        "path_to_pdf1.pdf",
-        "path_to_pdf2.pdf",
-        "path_to_pdf3.pdf",
-        "path_to_pdf4.pdf",
-        "path_to_pdf5.pdf",
-        "path_to_pdf6.pdf",
-        "path_to_pdf7.pdf",
-        "path_to_pdf8.pdf",
-        "path_to_pdf9.pdf"
-    ]
+    # Define your PDF paths with page ranges for each section
+    investor_presentation = {
+        "path_to_pdf1.pdf": (1, 3),
+        "path_to_pdf2.pdf": (2, 4),
+        "path_to_pdf3.pdf": (3, 5),
+        "path_to_pdf4.pdf": (1, 2),
+        "path_to_pdf5.pdf": (2, 3),
+        "path_to_pdf6.pdf": (3, 4),
+        "path_to_pdf7.pdf": (1, 3),
+        "path_to_pdf8.pdf": (2, 4),
+        "path_to_pdf9.pdf": (3, 5)
+    }
 
-    # Define the page ranges for each section
-    investor_presentation_pages = (1, 3)  # Example page range for investor presentation
-    earning_release_pages = (4, 6)  # Example page range for earning release
-    recent_news_pages = (7, 9)  # Example page range for recent news
+    earning_release = {
+        "path_to_pdf1.pdf": (4, 6),
+        "path_to_pdf2.pdf": (5, 7),
+        "path_to_pdf3.pdf": (6, 8),
+        "path_to_pdf4.pdf": (4, 5),
+        "path_to_pdf5.pdf": (5, 6),
+        "path_to_pdf6.pdf": (6, 7),
+        "path_to_pdf7.pdf": (4, 6),
+        "path_to_pdf8.pdf": (5, 7),
+        "path_to_pdf9.pdf": (6, 8)
+    }
 
-    # Define folders for each section
-    investor_presentation_folder = "Investor_Presentation"
-    earning_release_folder = "Earning_Release"
-    recent_news_folder = "Recent_News"
+    recent_news = {
+        "path_to_pdf1.pdf": (7, 9),
+        "path_to_pdf2.pdf": (8, 10),
+        "path_to_pdf3.pdf": (9, 11),
+        "path_to_pdf4.pdf": (7, 8),
+        "path_to_pdf5.pdf": (8, 9),
+        "path_to_pdf6.pdf": (9, 10),
+        "path_to_pdf7.pdf": (7, 9),
+        "path_to_pdf8.pdf": (8, 10),
+        "path_to_pdf9.pdf": (9, 11)
+    }
 
-    # Process each section and save the text files in the respective folders
-    process_pdfs(pdf_paths, investor_presentation_pages, "investor_presentation", investor_presentation_folder)
-    process_pdfs(pdf_paths, earning_release_pages, "earning_release", earning_release_folder)
-    process_pdfs(pdf_paths, recent_news_pages, "recent_news", recent_news_folder)
+    # Process each section and save the text files in respective folders
+    process_pdfs(investor_presentation, "Investor Presentation")
+    process_pdfs(earning_release, "Earning Release")
+    process_pdfs(recent_news, "Recent News")
 
 if __name__ == "__main__":
     main()
