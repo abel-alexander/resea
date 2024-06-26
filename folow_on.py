@@ -11,23 +11,23 @@ def main():
 
     with col1:
         st.subheader("First Dataset")
-        uploaded_file1 = st.file_uploader("Upload a CSV file", key="file1")
+        uploaded_file1 = st.file_uploader("Upload an Excel file", type=["xlsx"], key="file1")
 
     with col2:
         st.subheader("Second Dataset")
-        uploaded_file2 = st.file_uploader("Upload a CSV file", key="file2")
+        uploaded_file2 = st.file_uploader("Upload an Excel file", type=["xlsx"], key="file2")
 
     df1, df2 = None, None
 
     if uploaded_file1:
-        df1 = load_csv(uploaded_file1)
+        df1 = load_excel(uploaded_file1)
         if df1 is not None:
             df1 = clean_dataframe(df1)
         else:
             st.error("Error reading the first file. Please check the file format and encoding.")
 
     if uploaded_file2:
-        df2 = load_csv(uploaded_file2)
+        df2 = load_excel(uploaded_file2)
         if df2 is not None:
             df2 = clean_dataframe(df2)
         else:
@@ -47,15 +47,12 @@ def main():
                 mime='application/vnd.ms-excel'
             )
 
-def load_csv(uploaded_file):
+def load_excel(uploaded_file):
     try:
-        return pd.read_csv(uploaded_file, encoding='utf-8')
-    except UnicodeDecodeError:
-        try:
-            return pd.read_csv(uploaded_file, encoding='latin1')
-        except Exception as e:
-            st.error(f"Error reading the file: {e}")
-            return None
+        return pd.read_excel(uploaded_file)
+    except Exception as e:
+        st.error(f"Error reading the file: {e}")
+        return None
 
 def clean_text(text):
     text = text.lower()
