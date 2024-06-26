@@ -21,11 +21,17 @@ def main():
 
     if uploaded_file1:
         df1 = load_csv(uploaded_file1)
-        df1 = clean_dataframe(df1)
+        if df1 is not None:
+            df1 = clean_dataframe(df1)
+        else:
+            st.error("Error reading the first file. Please check the file format and encoding.")
 
     if uploaded_file2:
         df2 = load_csv(uploaded_file2)
-        df2 = clean_dataframe(df2)
+        if df2 is not None:
+            df2 = clean_dataframe(df2)
+        else:
+            st.error("Error reading the second file. Please check the file format and encoding.")
 
     if df1 is not None and df2 is not None:
         col1_name = st.selectbox('Select the column to compare from the first dataset:', df1.columns)
@@ -45,7 +51,11 @@ def load_csv(uploaded_file):
     try:
         return pd.read_csv(uploaded_file, encoding='utf-8')
     except UnicodeDecodeError:
-        return pd.read_csv(uploaded_file, encoding='latin1')
+        try:
+            return pd.read_csv(uploaded_file, encoding='latin1')
+        except Exception as e:
+            st.error(f"Error reading the file: {e}")
+            return None
 
 def clean_text(text):
     text = text.lower()
