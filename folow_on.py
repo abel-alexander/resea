@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from fuzzywuzzy import fuzz
 from io import BytesIO
 import re
 
@@ -68,35 +67,33 @@ def clean_dataframe(df):
     return df
 
 def compare_columns(df1, df2, col1, col2):
-    results = pd.DataFrame(columns=[col1, col2, 'Flag'])
+    results = pd.DataFrame(columns=[col1, 'Flag 10', 'Flag 3', 'Flag 2', 'Flag 1', 'Flag 0'])
     result_list = []
 
     for name1 in df1[col1]:
         name1_words = name1.split()
-        best_match = None
-        best_flag = 0
+        matches = {'Flag 10': None, 'Flag 3': None, 'Flag 2': None, 'Flag 1': None, 'Flag 0': None}
 
         for name2 in df2[col2]:
             name2_words = name2.split()
             if name1 == name2:
-                flag = 10
-            elif name1_words[:3] == name2_words[:3]:
-                flag = 3
-            elif name1_words[:2] == name2_words[:2]:
-                flag = 2
-            elif name1_words[:1] == name2_words[:1]:
-                flag = 1
-            else:
-                flag = 0
-
-            if flag > best_flag:
-                best_flag = flag
-                best_match = name2
+                matches['Flag 10'] = name2
+            elif name1_words[:3] == name2_words[:3] and matches['Flag 10'] is None:
+                matches['Flag 3'] = name2
+            elif name1_words[:2] == name2_words[:2] and matches['Flag 10'] is None and matches['Flag 3'] is None:
+                matches['Flag 2'] = name2
+            elif name1_words[:1] == name2_words[:1] and matches['Flag 10'] is None and matches['Flag 3'] is None and matches['Flag 2'] is None:
+                matches['Flag 1'] = name2
+            elif matches['Flag 10'] is None and matches['Flag 3'] is None and matches['Flag 2'] is None and matches['Flag 1'] is None:
+                matches['Flag 0'] = name2
 
         result_list.append({
             col1: name1,
-            col2: best_match,
-            'Flag': best_flag
+            'Flag 10': matches['Flag 10'],
+            'Flag 3': matches['Flag 3'],
+            'Flag 2': matches['Flag 2'],
+            'Flag 1': matches['Flag 1'],
+            'Flag 0': matches['Flag 0']
         })
 
     results = pd.concat([results, pd.DataFrame(result_list)], ignore_index=True)
