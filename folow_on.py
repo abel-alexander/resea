@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from fuzzywuzzy import fuzz
-from io import StringIO, BytesIO
+from io import BytesIO
 import re
 
 def main():
@@ -12,21 +12,19 @@ def main():
     with col1:
         st.subheader("First Dataset")
         uploaded_file1 = st.file_uploader("Upload a CSV file", key="file1")
-        text_data1 = st.text_area("Or paste CSV data here", height=300, key="text1")
 
     with col2:
         st.subheader("Second Dataset")
         uploaded_file2 = st.file_uploader("Upload a CSV file", key="file2")
-        text_data2 = st.text_area("Or paste CSV data here", height=300, key="text2")
 
     df1, df2 = None, None
 
-    if uploaded_file1 or text_data1:
-        df1 = pd.read_csv(StringIO(text_data1)) if text_data1 else pd.read_csv(uploaded_file1)
+    if uploaded_file1:
+        df1 = load_csv(uploaded_file1)
         df1 = clean_dataframe(df1)
 
-    if uploaded_file2 or text_data2:
-        df2 = pd.read_csv(StringIO(text_data2)) if text_data2 else pd.read_csv(uploaded_file2)
+    if uploaded_file2:
+        df2 = load_csv(uploaded_file2)
         df2 = clean_dataframe(df2)
 
     if df1 is not None and df2 is not None:
@@ -42,6 +40,12 @@ def main():
                 file_name='comparison_results.xlsx',
                 mime='application/vnd.ms-excel'
             )
+
+def load_csv(uploaded_file):
+    try:
+        return pd.read_csv(uploaded_file, encoding='utf-8')
+    except UnicodeDecodeError:
+        return pd.read_csv(uploaded_file, encoding='latin1')
 
 def clean_text(text):
     text = text.lower()
