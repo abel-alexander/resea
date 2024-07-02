@@ -62,3 +62,42 @@ for key, value in pdf_metadata.items():
 with open('pdf_metadata.txt', 'w') as meta_file:
     for key, value in pdf_metadata.items():
         meta_file.write(f'{key}: {value}\n')
+
+
+
+
+
+import fitz  # PyMuPDF
+from PIL import Image
+
+def convert_pdf_to_images(pdf_path, pages, output_folder):
+    # Open the PDF
+    pdf_document = fitz.open(pdf_path)
+    
+    for page_num in pages:
+        # Ensure the page number is within the PDF
+        if page_num < 0 or page_num >= pdf_document.page_count:
+            print(f"Page number {page_num} is out of range")
+            continue
+
+        # Select the page
+        page = pdf_document.load_page(page_num)
+        
+        # Render the page to a pixmap
+        pix = page.get_pixmap()
+        
+        # Convert to PIL Image
+        image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        
+        # Save the image
+        image_path = f"{output_folder}/page_{page_num + 1}.png"
+        image.save(image_path)
+        print(f"Page {page_num + 1} saved as {image_path}")
+
+# Example usage
+pdf_path = 'your_pdf_file.pdf'
+pages = [0, 2, 4]  # page numbers to convert (0-indexed)
+output_folder = 'output_images'
+
+convert_pdf_to_images(pdf_path, pages, output_folder)
+
