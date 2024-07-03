@@ -11,29 +11,10 @@ def is_text_page(page):
 def ocr_image(image):
     return pytesseract.image_to_string(image)
 
-def convert_pdf_to_images(pdf_path, pages, output_folder):
-    pdf_document = fitz.open(pdf_path)
-    
-    for page_num in pages:
-        if page_num < 0 or page_num >= pdf_document.page_count:
-            print(f"Page number {page_num} is out of range")
-            continue
-
-        page = pdf_document.load_page(page_num)
-        pix = page.get_pixmap()
-        image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-        
-        image_path = os.path.join(output_folder, f"page_{page_num + 1}.png")
-        image.save(image_path)
-        print(f"Page {page_num + 1} saved as {image_path}")
-
-        # Perform OCR on the saved image if OCR is enabled
-        if ocr:
-            ocr_text = ocr_image(image)
-            text_path = os.path.join(output_folder, f"page_{page_num + 1}.txt")
-            with open(text_path, 'w', encoding='utf-8') as text_file:
-                text_file.write(ocr_text)
-            print(f"Extracted OCR text from page {page_num + 1} saved as {text_path}")
+def convert_pdf_page_to_image(page):
+    pix = page.get_pixmap()
+    image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+    return image
 
 def extract_text_from_section(pdf_document, start_page, end_page, output_folder, ocr=False):
     section_text = ""
@@ -42,10 +23,10 @@ def extract_text_from_section(pdf_document, start_page, end_page, output_folder,
         page = pdf_document.load_page(page_num)
         if is_text_page(page):
             section_text += page.get_text()
-        elif ocr:
-            pix = page.get_pixmap()
-            image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-            section_text += ocr_image(image)
+        else:
+            image = convert_pdf_page_to_image(page)
+            if ocr:
+                section_text += ocr_image(image)
     
     section_text_path = os.path.join(output_folder, f'section_{start_page}_to_{end_page}.txt')
     with open(section_text_path, 'w', encoding='utf-8') as file:
