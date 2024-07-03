@@ -1,21 +1,40 @@
 import fitz  # PyMuPDF
-import PyPDF2
 from PIL import Image
 import pytesseract
-import io
 import os
+import io
 
-# Function to check if a page contains text
 def is_text_page(page):
     text = page.get_text()
     return bool(text.strip())
 
-# Function to perform OCR on an image
 def ocr_image(image):
     return pytesseract.image_to_string(image)
 
-# Function to extract text from a section of a PDF
-def extract_text_from_section(pdf_document, start_page, end_page):
+def convert_pdf_to_images(pdf_path, pages, output_folder):
+    pdf_document = fitz.open(pdf_path)
+    
+    for page_num in pages:
+        if page_num < 0 or page_num >= pdf_document.page_count:
+            print(f"Page number {page_num} is out of range")
+            continue
+
+        page = pdf_document.load_page(page_num)
+        pix = page.get_pixmap()
+        image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        
+        image_path = os.path.join(output_folder, f"page_{page_num + 1}.png")
+        image.save(image_path)
+        print(f"Page {page_num + 1} saved as {image_path}")
+
+        # Perform OCR on the saved image
+        ocr_text = ocr_image(image)
+        text_path = os.path.join(output_folder, f"page_{page_num + 1}.txt")
+        with open(text_path, 'w', encoding='utf-8') as text_file:
+            text_file.write(ocr_text)
+        print(f"Extracted OCR text from page {page_num + 1} saved as {text_path}")
+
+def extract_text_from_section(pdf_document, start_page, end_page, output_folder):
     section_text = ""
 
     for page_num in range(start_page - 1, end_page):
@@ -24,12 +43,14 @@ def extract_text_from_section(pdf_document, start_page, end_page):
             section_text += page.get_text()
         else:
             pix = page.get_pixmap()
-            img = Image.open(io.BytesIO(pix.tobytes("png")))
-            section_text += ocr_image(img)
+            image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            section_text += ocr_image(image)
     
-    return section_text
+    section_text_path = os.path.join(output_folder, f'section_{start_page}_to_{end_page}.txt')
+    with open(section_text_path, 'w', encoding='utf-8') as file:
+        file.write(section_text)
+    print(f"Extracted text for pages {start_page} to {end_page} saved as {section_text_path}")
 
-# Function to process multiple documents and sections
 def extract_and_save_text(document_sections, output_base_path):
     for doc_info in document_sections:
         file_path = doc_info['file_path']
@@ -40,17 +61,13 @@ def extract_and_save_text(document_sections, output_base_path):
             title = section['title']
             start_page = section['start_page']
             end_page = section['end_page']
-            section_text = extract_text_from_section(pdf_document, start_page, end_page)
 
             # Create directory for the section if it doesn't exist
             section_dir = os.path.join(output_base_path, title)
             os.makedirs(section_dir, exist_ok=True)
 
-            # Save the extracted text to a file within the section directory
-            document_name = os.path.basename(file_path).replace('.pdf', '.txt')
-            output_file_path = os.path.join(section_dir, document_name)
-            with open(output_file_path, 'w', encoding='utf-8') as output_file:
-                output_file.write(section_text)
+            # Extract text from the section and save
+            extract_text_from_section(pdf_document, start_page, end_page, section_dir)
 
 # Example usage
 document_sections = [
