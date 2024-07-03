@@ -11,38 +11,21 @@ def is_text_page(page):
 def ocr_image(image):
     return pytesseract.image_to_string(image)
 
-def convert_pdf_to_images(pdf_path, start_page, end_page, output_folder):
-    pdf_document = fitz.open(pdf_path)
-    ocr_text = ""
+def convert_pdf_page_to_image(page):
+    pix = page.get_pixmap()
+    image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+    return image
 
-    for page_num in range(start_page - 1, end_page):
-        if page_num < 0 or page_num >= pdf_document.page_count:
-            print(f"Page number {page_num} is out of range")
-            continue
-
-        page = pdf_document.load_page(page_num)
-        pix = page.get_pixmap()
-        image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-        
-        image_path = os.path.join(output_folder, f"page_{page_num + 1}.png")
-        image.save(image_path)
-        print(f"Page {page_num + 1} saved as {image_path}")
-
-        # Perform OCR on the saved image and accumulate the text
-        ocr_text += ocr_image(image)
-    
-    return ocr_text
-
-def extract_text_from_section(pdf_document, start_page, end_page, ocr=False, output_folder=None):
+def extract_text_from_section(pdf_document, start_page, end_page, ocr=False):
     section_text = ""
 
-    if ocr:
-        section_text = convert_pdf_to_images(pdf_document.name, start_page, end_page, output_folder)
-    else:
-        for page_num in range(start_page - 1, end_page):
-            page = pdf_document.load_page(page_num)
-            if is_text_page(page):
-                section_text += page.get_text()
+    for page_num in range(start_page - 1, end_page):
+        page = pdf_document.load_page(page_num)
+        if is_text_page(page):
+            section_text += page.get_text()
+        elif ocr:
+            image = convert_pdf_page_to_image(page)
+            section_text += ocr_image(image)
     
     return section_text
 
@@ -63,7 +46,7 @@ def extract_and_save_text(document_sections, output_base_path):
             os.makedirs(section_dir, exist_ok=True)
 
             # Extract text from the section
-            section_text = extract_text_from_section(pdf_document, start_page, end_page, ocr=ocr, output_folder=section_dir)
+            section_text = extract_text_from_section(pdf_document, start_page, end_page, ocr=ocr)
 
             # Save the extracted text to a file within the section directory
             document_name = os.path.basename(file_path).replace('.pdf', '.txt')
