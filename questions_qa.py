@@ -1,5 +1,4 @@
 
-
 def clean_text(text):
     """Remove unwanted characters like tabs and question numbers."""
     text = text.replace('\t', '').strip()
@@ -37,7 +36,7 @@ def get_questions_and_answers_from_excel(section, excel_path):
     
     return pd.DataFrame(extracted_data)
 
-def perform_qa_for_section_and_company(section, company_name, base_path='/path/to/your/base/folder', excel_path='/path/to/your/questions.xlsx'):
+def perform_qa_for_section(section, base_path, excel_path):
     section_path = os.path.join(base_path, 'extracted_data', section)
     output_folder = os.path.join(section_path, "QA_results")
     
@@ -64,38 +63,46 @@ def perform_qa_for_section_and_company(section, company_name, base_path='/path/t
     # Load questions and answers from Excel
     qa_df = get_questions_and_answers_from_excel(section, excel_path)
 
-    # Check if the file exists for the specified company
-    file_name = f"{company_name}.txt"
-    file_path = os.path.join(section_path, file_name)
-    if not os.path.exists(file_path):
-        print(f"No document found for company: {company_name} in section: {section}")
-        return
-    
-    # Load the document
-    documents = SimpleDirectoryReader(file_path).load_data()
-    
-    # Create index from document
-    index = VectorStoreIndex.from_documents(documents, service_context=service_context)
-    query_engine = index.as_query_engine()
-    
-    # Get questions and reference answers for the specified company
-    company_data = qa_df[qa_df['Company'] == company_name]
-    
-    # Open a file to write the QA results for this document
-    result_file_name = f"{company_name}_qa_results.txt"
-    result_file_path = os.path.join(output_folder, result_file_name)
-    
-    with open(result_file_path, 'w') as result_file:
-        # Perform the queries for each document
-        for _, row in company_data.iterrows():
-            question = row['Question']
-            reference_answer = row['Reference Answer']
-            response = query_engine.query(question)
-            result_file.write(f"Question: {question}\n")
-            result_file.write(f"Reference Answer: {reference_answer}\n")
-            result_file.write(f"Response: {response}\n\n")
-    
-    print(f"QA results saved to {result_file_path}")
+    # Iterate over each file in the section folder
+    for file_name in os.listdir(section_path):
+        if file_name.endswith(".txt"):  # Assuming the documents are text files
+            file_path = os.path.join(section_path, file_name)
+            
+            # Debugging print statements
+            print(f"Processing file: {file_path}")
+            print(f"File exists: {os.path.exists(file_path)}")
+            
+            company_name = os.path.splitext(file_name)[0]  # Extract company name from file name
+            
+            # Read the document
+            with open(file_path, 'r', encoding='utf-8') as file:
+                document_text = file.read()
+            
+            # Create a list of documents for the index
+            documents = [{"text": document_text, "metadata": {"source": file_path}}]
+            
+            # Create index from document
+            index = VectorStoreIndex.from_documents(documents, service_context=service_context)
+            query_engine = index.as_query_engine()
+            
+            # Get questions and reference answers for the current company
+            company_data = qa_df[qa_df['Company'] == company_name]
+            
+            # Open a file to write the QA results for this document
+            result_file_name = f"{company_name}_qa_results.txt"
+            result_file_path = os.path.join(output_folder, result_file_name)
+            
+            with open(result_file_path, 'w') as result_file:
+                # Perform the queries for each document
+                for _, row in company_data.iterrows():
+                    question = row['Question']
+                    reference_answer = row['Reference Answer']
+                    response = query_engine.query(question)
+                    result_file.write(f"Question: {question}\n")
+                    result_file.write(f"Reference Answer: {reference_answer}\n")
+                    result_file.write(f"Response: {response}\n\n")
+            
+            print(f"QA results saved to {result_file_path}")
 
 # Example usage
-perform_qa_for_section_and_company('Earnings Release', 'Microsoft', base_path='/path/to/your/base/folder', excel_path='/path/to/your/questions.xlsx')
+perform_qa_for_section('10K', '/phoenix/workspaces/zk9zkma/Image_text_extraction/output_sections', '/path/to/your/questions.xlsx')
