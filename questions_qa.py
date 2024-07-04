@@ -30,8 +30,3 @@ def get_questions_and_answers_from_excel(section, excel_path):
     
     return pd.DataFrame(extracted_data)
 
-# Example usage
-excel_path = '/path/to/your/questions.xlsx'
-section = 'Earnings Release'
-qa_df = get_questions_and_answers_from_excel(section, excel_path)
-qa_df
