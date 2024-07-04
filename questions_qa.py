@@ -1,4 +1,8 @@
+import os
 import pandas as pd
+from llama_index import VectorStoreIndex, SimpleDirectoryReader, ServiceContext
+from llama_index.llms.huggingface import HuggingFaceLLM
+from llama_index.embeddings.huggingface import HuggingFaceEmbeddings
 import re
 
 def clean_text(text):
@@ -38,8 +42,64 @@ def get_questions_and_answers_from_excel(section, excel_path):
     
     return pd.DataFrame(extracted_data)
 
+def perform_qa_for_section(section, base_path='/path/to/your/base/folder', excel_path='/path/to/your/questions.xlsx'):
+    section_path = os.path.join(base_path, 'extracted_data', section)
+    output_folder = os.path.join(section_path, "QA_results")
+    
+    # Create the output folder if it doesn't exist
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+    
+    # Initialize LLM and embeddings
+    llm = HuggingFaceLLM(
+        context_window=4096,
+        max_new_tokens=512,
+        generate_kwargs={"temperature": 0.2, "do_sample": False},
+        system_prompt="system-prompt",
+        query_wrapper_prompt="query_wrapper_prompt",
+        template_name="meta-llama/Llama-2-7b-chat-hf",
+        model_name="meta-llama/Llama-2-7b-chat-hf",
+        device_map="auto",
+        model_kwargs={"torch_dtype": "torch.float16", "load_in_8bit": True}
+    )
+    
+    embed_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+    service_context = ServiceContext.from_defaults(chunk_size=1024, llm=llm, embed_model=embed_model)
+
+    # Load questions and answers from Excel
+    qa_df = get_questions_and_answers_from_excel(section, excel_path)
+
+    # Iterate over each file in the section folder
+    for file_name in os.listdir(section_path):
+        if file_name.endswith(".txt"):  # Assuming the documents are text files
+            file_path = os.path.join(section_path, file_name)
+            company_name = os.path.splitext(file_name)[0]  # Extract company name from file name
+            
+            # Load the document
+            documents = SimpleDirectoryReader(file_path).load_data()
+            
+            # Create index from document
+            index = VectorStoreIndex.from_documents(documents, service_context=service_context)
+            query_engine = index.as_query_engine()
+            
+            # Get questions and reference answers for the current company
+            company_data = qa_df[qa_df['Company'] == company_name]
+            
+            # Open a file to write the QA results for this document
+            result_file_name = f"{company_name}_qa_results.txt"
+            result_file_path = os.path.join(output_folder, result_file_name)
+            
+            with open(result_file_path, 'w') as result_file:
+                # Perform the queries for each document
+                for _, row in company_data.iterrows():
+                    question = row['Question']
+                    reference_answer = row['Reference Answer']
+                    response = query_engine.query(question)
+                    result_file.write(f"Question: {question}\n")
+                    result_file.write(f"Reference Answer: {reference_answer}\n")
+                    result_file.write(f"Response: {response}\n\n")
+            
+            print(f"QA results saved to {result_file_path}")
+
 # Example usage
-excel_path = '/path/to/your/questions.xlsx'
-section = 'Earnings Release'
-qa_df = get_questions_and_answers_from_excel(section, excel_path)
-qa_df
+perform_qa_for_section('Earnings Release', base_path='/path/to/your/base/folder', excel_path='/path/to/your/questions.xlsx')
