@@ -1,72 +1,75 @@
 import os
-from PyPDF2 import PdfFileReader
-from langchain.document_loaders import PDFLoader
+import pandas as pd
+from llama_index import VectorStoreIndex, SimpleDirectoryReader, ServiceContext
+from llama_index.llms.huggingface import HuggingFaceLLM
+from llama_index.embeddings.huggingface import HuggingFaceEmbeddings
 
-def extract_text_from_pdf(pdf_path, start_page, end_page):
-    loader = PDFLoader.from_file(pdf_path)
-    document = loader.load()
-    text = ""
-    for page_number in range(start_page, end_page + 1):
-        page = document.pages[page_number - 1]
-        text += page.extract_text() + "\n"
-    return text
+# Define paths to folders containing documents
+base_path = "/path/to/your/base/folder"
+folders = ["Recent News", "Investor Presentation", "Equity Research", "10K", "Earnings Transcript", "Earnings Release"]
 
-def save_text_to_file(text, folder, filename):
-    if not os.path.exists(folder):
-        os.makedirs(folder)
-    file_path = os.path.join(folder, filename)
-    with open(file_path, 'w') as file:
-        file.write(text)
+# Initialize LLM and embeddings
+llm = HuggingFaceLLM(
+    context_window=4096,
+    max_new_tokens=512,
+    generate_kwargs={"temperature": 0.2, "do_sample": False},
+    system_prompt="system-prompt",
+    query_wrapper_prompt="query_wrapper_prompt",
+    template_name="meta-llama/Llama-2-7b-chat-hf",
+    model_name="meta-llama/Llama-2-7b-chat-hf",
+    device_map="auto",
+    model_kwargs={"torch_dtype": "torch.float16", "load_in_8bit": True}
+)
 
-def process_pdfs(pdf_paths_with_ranges, section_name):
-    folder = section_name.replace(" ", "_").lower()
-    for pdf_path, (start_page, end_page) in pdf_paths_with_ranges.items():
-        text = extract_text_from_pdf(pdf_path, start_page, end_page)
-        filename = f"{os.path.splitext(os.path.basename(pdf_path))[0]}_{section_name}.txt"
-        save_text_to_file(text, folder, filename)
+embed_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
+service_context = ServiceContext.from_defaults(chunk_size=1024, llm=llm, embed_model=embed_model)
 
-def main():
-    # Define your PDF paths with page ranges for each section
-    investor_presentation = {
-        "path_to_pdf1.pdf": (1, 3),
-        "path_to_pdf2.pdf": (2, 4),
-        "path_to_pdf3.pdf": (3, 5),
-        "path_to_pdf4.pdf": (1, 2),
-        "path_to_pdf5.pdf": (2, 3),
-        "path_to_pdf6.pdf": (3, 4),
-        "path_to_pdf7.pdf": (1, 3),
-        "path_to_pdf8.pdf": (2, 4),
-        "path_to_pdf9.pdf": (3, 5)
-    }
+# Load questions from Excel
+questions_df = pd.read_excel('/path/to/your/questions.xlsx', sheet_name=0, header=1)  # Adjust header and sheet_name as needed
 
-    earning_release = {
-        "path_to_pdf1.pdf": (4, 6),
-        "path_to_pdf2.pdf": (5, 7),
-        "path_to_pdf3.pdf": (6, 8),
-        "path_to_pdf4.pdf": (4, 5),
-        "path_to_pdf5.pdf": (5, 6),
-        "path_to_pdf6.pdf": (6, 7),
-        "path_to_pdf7.pdf": (4, 6),
-        "path_to_pdf8.pdf": (5, 7),
-        "path_to_pdf9.pdf": (6, 8)
-    }
+# Function to get questions for a specific section and company
+def get_questions(section, company):
+    section_df = questions_df[questions_df.columns[questions_df.iloc[0] == section]]
+    company_questions = section_df[section_df.iloc[:, 0] == company].dropna().values.flatten().tolist()
+    questions = [q.split("\n")[0] for q in company_questions if isinstance(q, str)]
+    answers = [q.split("\n")[1] if len(q.split("\n")) > 1 else "" for q in company_questions if isinstance(q, str)]
+    return questions, answers
 
-    recent_news = {
-        "path_to_pdf1.pdf": (7, 9),
-        "path_to_pdf2.pdf": (8, 10),
-        "path_to_pdf3.pdf": (9, 11),
-        "path_to_pdf4.pdf": (7, 8),
-        "path_to_pdf5.pdf": (8, 9),
-        "path_to_pdf6.pdf": (9, 10),
-        "path_to_pdf7.pdf": (7, 9),
-        "path_to_pdf8.pdf": (8, 10),
-        "path_to_pdf9.pdf": (9, 11)
-    }
-
-    # Process each section and save the text files in respective folders
-    process_pdfs(investor_presentation, "Investor Presentation")
-    process_pdfs(earning_release, "Earning Release")
-    process_pdfs(recent_news, "Recent News")
-
-if __name__ == "__main__":
-    main()
+# Iterate over each folder
+for folder in folders:
+    folder_path = os.path.join(base_path, folder)
+    output_folder = os.path.join(folder_path, "QA_results")
+    
+    # Create the output folder if it doesn't exist
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+    
+    # Iterate over each file in the folder
+    for file_name in os.listdir(folder_path):
+        if file_name.endswith(".txt"):  # Assuming the documents are text files
+            file_path = os.path.join(folder_path, file_name)
+            company_name = os.path.splitext(file_name)[0]  # Extract company name from file name
+            
+            # Load the document
+            documents = SimpleDirectoryReader(file_path).load_data()
+            
+            # Create index from document
+            index = VectorStoreIndex.from_documents(documents, service_context=service_context)
+            query_engine = index.as_query_engine()
+            
+            # Get questions and reference answers for the current section and company
+            questions, reference_answers = get_questions(folder, company_name)
+            
+            # Open a file to write the QA results for this document
+            result_file_name = f"{company_name}_qa_results.txt"
+            result_file_path = os.path.join(output_folder, result_file_name)
+            
+            with open(result_file_path, 'w') as result_file:
+                # Perform the queries for each document
+                for question, ref_answer in zip(questions, reference_answers):
+                    response = query_engine.query(question)
+                    result_file.write(f"Question: {question}\n")
+                    result_file.write(f"Reference Answer: {ref_answer}\n")
+                    result_file.write(f"Response: {response}\n\n")
+            
+            print(f"QA results saved to {result_file_path}")
