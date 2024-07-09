@@ -3,6 +3,7 @@ import pandas as pd
 from llama_index import VectorStoreIndex, ServiceContext
 from llama_index.llms.huggingface import HuggingFaceLLM
 from llama_index.embeddings.huggingface import HuggingFaceEmbeddings
+from llama_index.readers.file import SimpleDirectoryReader
 import re
 
 def clean_text(text):
@@ -81,12 +82,9 @@ def perform_qa_for_section(section, base_path, excel_path):
             print(f"File not found for company {company_name}: {file_path}")
             continue
         
-        # Read the document
-        with open(file_path, 'r', encoding='utf-8') as file:
-            document_text = file.read()
-        
-        # Create a list of documents for the index
-        documents = [{"text": document_text, "metadata": {"source": file_path}}]
+        # Load the document using SimpleDirectoryReader
+        reader = SimpleDirectoryReader(input_files=[file_path])
+        documents = reader.load_data()
         
         # Create index from document
         index = VectorStoreIndex.from_documents(documents, service_context=service_context)
@@ -99,7 +97,7 @@ def perform_qa_for_section(section, base_path, excel_path):
             qa_df.loc[company_df.index[idx], 'Response'] = response
     
     # Save the updated DataFrame to a single Excel file
-    result_file_path = os.path.join(base_path, f"{section}_qa_results.xlsx")
+    result_file_path = os.path.join(output_folder, f"{section}_qa_results.xlsx")
     qa_df.to_excel(result_file_path, index=False)
     
     print(f"QA results saved to {result_file_path}")
