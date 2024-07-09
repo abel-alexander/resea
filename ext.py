@@ -46,7 +46,7 @@ def get_questions_and_answers_from_excel(section, excel_path):
 
 def perform_qa_for_section(section, base_path, excel_path):
     section_path = os.path.join(base_path, 'extracted_data', section)
-    output_folder = os.path.join(base_path, "QA_results")
+    output_folder = os.path.join(base_path, "QA_llama3")
     
     # Create the output folder if it doesn't exist
     if not os.path.exists(output_folder):
@@ -75,8 +75,8 @@ def perform_qa_for_section(section, base_path, excel_path):
     for company_name in qa_df['Company'].unique():
         company_df = qa_df[qa_df['Company'] == company_name].copy()  # Work on a copy of the data
         
-        # Construct the file path for the company's document
-        file_path = os.path.join(section_path, f"{company_name}.txt")
+        # Construct the file path for the company's document (converted to lowercase)
+        file_path = os.path.join(section_path, f"{company_name.lower()}.txt")
         
         if not os.path.exists(file_path):
             print(f"File not found for company {company_name}: {file_path}")
@@ -97,10 +97,15 @@ def perform_qa_for_section(section, base_path, excel_path):
             qa_df.loc[company_df.index[idx], 'Response'] = response
     
     # Save the updated DataFrame to a single Excel file
-    result_file_path = os.path.join(output_folder, f"{section}_qa_results.xlsx")
+    result_file_path = os.path.join(output_folder, f"{section}_qa_llama3.xlsx")
     qa_df.to_excel(result_file_path, index=False)
     
     print(f"QA results saved to {result_file_path}")
 
 # Example usage
-perform_qa_for_section('Earnings Release', '/phoenix/workspaces/zk9zkma/Image_text_extraction', '/path/to/your/questions.xlsx')
+sections = ['Earnings Release', '10K', 'Equity Research', 'Investor Presentation', 'Recent News']
+base_path = '/phoenix/workspaces/zk9zkma/Image_text_extraction'
+excel_path = '/path/to/your/questions.xlsx'
+
+for section in sections:
+    perform_qa_for_section(section, base_path, excel_path)
