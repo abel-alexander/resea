@@ -94,7 +94,7 @@ def perform_qa_for_sections(base_path, excel_path):
 
         # Perform the query and update the response in the DataFrame
         response = query_engine.query(question)
-        qa_df.at[idx, 'Response'] = response
+        qa_df.at[idx, 'Response'] = response['response']
 
     # Save the updated DataFrame to a single Excel file
     result_file_path = os.path.join(output_folder, "final_qa_llama3.xlsx")
