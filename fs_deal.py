@@ -33,7 +33,7 @@ def main():
             st.error("Error reading the second file. Please check the file format and encoding.")
 
     if df1 is not None and df2 is not None:
-        if 'fs-ticker' in df1.columns and 'ticker' in df2.columns and 'currency' in df2.columns:
+        if 'FsTicker' in df1.columns and 'ticker' in df2.columns and 'currency' in df2.columns:
             changed_names = match_tickers_and_update_companies(df1, df2)
             st.subheader("Names Changed Due to Ticker Logic")
             st.write(changed_names)
@@ -71,23 +71,27 @@ def clean_dataframe(df):
     df = df.applymap(lambda s: clean_text(s) if type(s) is str else s)
     return df
 
-def match_tickers_and_update_companies(df1, df2):
-    df1['ticker'] = df1['fs-ticker'].apply(lambda x: x.split('-')[0] if '-' in x else x)
-    df1['currency'] = df1['fs-ticker'].apply(lambda x: x.split('-')[1] if '-' in x else '')
+def extract_ticker_and_currency(fs_ticker):
+    parts = fs_ticker.split('-')
+    ticker = parts[0] if len(parts) > 0 else ''
+    currency = parts[1] if len(parts) > 1 else ''
+    return ticker, currency
 
+def match_tickers_and_update_companies(df1, df2):
     changed_names = []
 
     for idx1, row1 in df1.iterrows():
-        ticker1 = row1['ticker']
-        currency1 = row1['currency']
+        ticker1, currency1 = extract_ticker_and_currency(row1['FsTicker'])
         for idx2, row2 in df2.iterrows():
-            if ticker1 == row2['ticker'] and (currency1 == '' or currency1 == row2['currency'].lower()):
-                df2.at[idx2, 'CompanyName'] = row1['company']
+            if ticker1 == str(row2['ticker']) and (currency1 == '' or currency1 in row2['currency']):
+                old_company_name = row2['CompanyName']
+                new_company_name = row1['CompanyName']
+                df2.at[idx2, 'CompanyName'] = new_company_name
                 changed_names.append({
                     'Ticker': ticker1,
                     'Currency': currency1,
-                    'Old CompanyName': row2['CompanyName'],
-                    'New CompanyName': row1['company']
+                    'Old CompanyName': old_company_name,
+                    'New CompanyName': new_company_name
                 })
                 break
 
