@@ -37,7 +37,7 @@ def main():
         st.error("Error reading the second file. Please check the file format and encoding.")
 
     if df1 is not None and df2 is not None:
-        if 'FsTicker' in df1.columns and 'ticker' in df2.columns and 'currency' in df2.columns:
+        if 'FsTicker' in df1.columns and 'ticker_dealogic' in df2.columns and 'currency_dealogic' in df2.columns:
             changed_names = match_tickers_and_update_companies(df1, df2)
             st.subheader("Names Changed Due to Ticker Logic")
             st.write(changed_names)
@@ -87,10 +87,10 @@ def match_tickers_and_update_companies(df1, df2):
     for idx1, row1 in df1.iterrows():
         ticker1, currency1 = extract_ticker_and_currency(row1['FsTicker'])
         for idx2, row2 in df2.iterrows():
-            if ticker1 == str(row2['ticker']) and (currency1 == '' or currency1 in row2['currency']):
-                old_company_name = row2['CompanyName']
+            if ticker1 == str(row2['ticker_dealogic']) and (currency1 == '' or currency1 in row2['currency_dealogic']):
+                old_company_name = row2['company_dealogic']
                 new_company_name = row1['CompanyName']
-                df2.at[idx2, 'CompanyName'] = new_company_name
+                df2.at[idx2, 'company_dealogic'] = new_company_name
                 changed_names.append({
                     'Ticker': ticker1,
                     'Currency': currency1,
