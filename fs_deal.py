@@ -6,31 +6,35 @@ import re
 def main():
     st.title('Dataframe Comparator')
 
-    col1, col2 = st.columns(2)
+    # Commenting out the upload option
+    # col1, col2 = st.columns(2)
 
-    with col1:
-        st.subheader("First Dataset (Factset)")
-        uploaded_file1 = st.file_uploader("Upload an Excel file", type=["xlsx"], key="file1")
+    # with col1:
+    #     st.subheader("First Dataset (Factset)")
+    #     uploaded_file1 = st.file_uploader("Upload an Excel file", type=["xlsx"], key="file1")
 
-    with col2:
-        st.subheader("Second Dataset (Dealogic)")
-        uploaded_file2 = st.file_uploader("Upload an Excel file", type=["xlsx"], key="file2")
+    # with col2:
+    #     st.subheader("Second Dataset (Dealogic)")
+    #     uploaded_file2 = st.file_uploader("Upload an Excel file", type=["xlsx"], key="file2")
 
     df1, df2 = None, None
 
-    if uploaded_file1:
-        df1 = load_excel(uploaded_file1)
-        if df1 is not None:
-            df1 = clean_dataframe(df1)
-        else:
-            st.error("Error reading the first file. Please check the file format and encoding.")
+    # Replace with directory path
+    file_path1 = 'path/to/factset.xlsx'  # Update this path
+    file_path2 = 'path/to/dealogic.xlsx'  # Update this path
 
-    if uploaded_file2:
-        df2 = load_excel(uploaded_file2)
-        if df2 is not None:
-            df2 = clean_dataframe(df2)
-        else:
-            st.error("Error reading the second file. Please check the file format and encoding.")
+    # Load the Excel files directly from the specified path
+    df1 = load_excel(file_path1)
+    if df1 is not None:
+        df1 = clean_dataframe(df1)
+    else:
+        st.error("Error reading the first file. Please check the file format and encoding.")
+
+    df2 = load_excel(file_path2)
+    if df2 is not None:
+        df2 = clean_dataframe(df2)
+    else:
+        st.error("Error reading the second file. Please check the file format and encoding.")
 
     if df1 is not None and df2 is not None:
         if 'FsTicker' in df1.columns and 'ticker' in df2.columns and 'currency' in df2.columns:
@@ -51,9 +55,9 @@ def main():
                 mime='application/vnd.ms-excel'
             )
 
-def load_excel(uploaded_file):
+def load_excel(file_path):
     try:
-        return pd.read_excel(uploaded_file)
+        return pd.read_excel(file_path)
     except Exception as e:
         st.error(f"Error reading the file: {e}")
         return None
