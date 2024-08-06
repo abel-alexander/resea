@@ -34,7 +34,9 @@ def main():
 
     if df1 is not None and df2 is not None:
         if 'fs-ticker' in df1.columns and 'ticker' in df2.columns and 'currency' in df2.columns:
-            df1, df2 = compare_and_flag_tickers(df1, df2)
+            changed_names = match_tickers_and_update_companies(df1, df2)
+            st.subheader("Names Changed Due to Ticker Logic")
+            st.write(changed_names)
 
         col1_name = st.selectbox('Select the column to compare from the first dataset:', df1.columns)
         col2_name = st.selectbox('Select the column to compare from the second dataset:', df2.columns)
@@ -69,38 +71,43 @@ def clean_dataframe(df):
     df = df.applymap(lambda s: clean_text(s) if type(s) is str else s)
     return df
 
-def compare_and_flag_tickers(df1, df2):
+def match_tickers_and_update_companies(df1, df2):
     df1['ticker'] = df1['fs-ticker'].apply(lambda x: x.split('-')[0] if '-' in x else x)
-    df1['matched_company'] = None
-    df1['match_flag'] = None
+    df1['currency'] = df1['fs-ticker'].apply(lambda x: x.split('-')[1] if '-' in x else '')
+
+    changed_names = []
 
     for idx1, row1 in df1.iterrows():
         ticker1 = row1['ticker']
+        currency1 = row1['currency']
         for idx2, row2 in df2.iterrows():
-            if ticker1 == row2['ticker']:
-                df1.at[idx1, 'matched_company'] = row2['CompanyName']
-                df1.at[idx1, 'match_flag'] = 'Ticker Match'
+            if ticker1 == row2['ticker'] and (currency1 == '' or currency1 == row2['currency'].lower()):
+                df2.at[idx2, 'CompanyName'] = row1['company']
+                changed_names.append({
+                    'Ticker': ticker1,
+                    'Currency': currency1,
+                    'Old CompanyName': row2['CompanyName'],
+                    'New CompanyName': row1['company']
+                })
                 break
 
-    return df1, df2
+    return pd.DataFrame(changed_names)
 
 def compare_columns(df1, df2, col1, col2):
     results = pd.DataFrame(columns=[col1, 'Flag 10', 'Flag 3', 'Flag 2', 'Flag 1', 'Flag 0'])
     result_list = []
 
     for name1 in df1[col1]:
-        name1_words = name1.split()
         matches = {'Flag 10': None, 'Flag 3': None, 'Flag 2': None, 'Flag 1': None, 'Flag 0': None}
 
         for name2 in df2[col2]:
-            name2_words = name2.split()
             if name1 == name2:
                 matches['Flag 10'] = name2
-            elif name1_words[:3] == name2_words[:3] and matches['Flag 10'] is None:
+            elif name1[:3] == name2[:3] and matches['Flag 10'] is None:
                 matches['Flag 3'] = name2
-            elif name1_words[:2] == name2_words[:2] and matches['Flag 10'] is None and matches['Flag 3'] is None:
+            elif name1[:2] == name2[:2] and matches['Flag 10'] is None and matches['Flag 3'] is None:
                 matches['Flag 2'] = name2
-            elif name1_words[:1] == name2_words[:1] and matches['Flag 10'] is None and matches['Flag 3'] is None and matches['Flag 2'] is None:
+            elif name1[:1] == name2[:1] and matches['Flag 10'] is None and matches['Flag 3'] is None and matches['Flag 2'] is None:
                 matches['Flag 1'] = name2
             elif matches['Flag 10'] is None and matches['Flag 3'] is None and matches['Flag 2'] is None and matches['Flag 1'] is None:
                 matches['Flag 0'] = name2
