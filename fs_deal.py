@@ -38,7 +38,7 @@ def main():
 
     if df1 is not None and df2 is not None:
         if 'FsTicker' in df1.columns and 'ticker_dealogic' in df2.columns and 'currency_dealogic' in df2.columns:
-            changed_names = match_tickers_and_update_companies(df1, df2)
+            changed_names = update_combined_ticker_and_names(df1, df2)
             st.subheader("Names Changed Due to Ticker Logic")
             st.write(changed_names)
 
@@ -75,29 +75,25 @@ def clean_dataframe(df):
     df = df.applymap(lambda s: clean_text(s) if type(s) is str else s)
     return df
 
-def extract_ticker_and_currency(fs_ticker):
-    parts = fs_ticker.split('-')
-    ticker = parts[0] if len(parts) > 0 else ''
-    currency = parts[1] if len(parts) > 1 else ''
-    return ticker, currency
+def update_combined_ticker_and_names(factset_df, dealogic_df):
+    dealogic_df['combined_ticker'] = dealogic_df.apply(
+        lambda row: f"{row['ticker_dealogic']}-{row['currency_dealogic'][:2]}" if re.match(r'^\d+$', str(row['ticker_dealogic'])) else '', axis=1)
+    dealogic_df['New_name'] = dealogic_df['company_dealogic']
 
-def match_tickers_and_update_companies(df1, df2):
     changed_names = []
 
-    for idx1, row1 in df1.iterrows():
-        ticker1, currency1 = extract_ticker_and_currency(row1['FsTicker'])
-        for idx2, row2 in df2.iterrows():
-            if ticker1 == str(row2['ticker_dealogic']) and (currency1 == '' or currency1 in row2['currency_dealogic']):
-                old_company_name = row2['company_dealogic']
-                new_company_name = row1['CompanyName']
-                df2.at[idx2, 'company_dealogic'] = new_company_name
+    for idx, row in dealogic_df.iterrows():
+        if row['combined_ticker']:
+            match = factset_df[factset_df['FsTicker'] == row['combined_ticker']]
+            if not match.empty:
+                old_name = row['New_name']
+                new_name = match['CompanyName'].values[0]
+                dealogic_df.at[idx, 'New_name'] = new_name
                 changed_names.append({
-                    'Ticker': ticker1,
-                    'Currency': currency1,
-                    'Old CompanyName': old_company_name,
-                    'New CompanyName': new_company_name
+                    'Combined Ticker': row['combined_ticker'],
+                    'Old Name': old_name,
+                    'New Name': new_name
                 })
-                break
 
     return pd.DataFrame(changed_names)
 
