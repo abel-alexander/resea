@@ -26,7 +26,7 @@ def main():
     # Load the Excel files directly from the specified path
     df1 = load_excel(file_path1)
     if df1 is not None:
-        df1 = clean_dataframe(df1)
+        df1 = clean_dataframe(df1, exclude_columns=['FsTicker'])
     else:
         st.error("Error reading the first file. Please check the file format and encoding.")
 
@@ -72,8 +72,10 @@ def clean_text(text):
     text = text.strip()
     return text
 
-def clean_dataframe(df):
-    df = df.applymap(lambda s: clean_text(s) if type(s) is str else s)
+def clean_dataframe(df, exclude_columns=[]):
+    for column in df.columns:
+        if column not in exclude_columns:
+            df[column] = df[column].apply(lambda s: clean_text(s) if type(s) is str else s)
     return df
 
 def update_combined_ticker_and_names(factset_df, dealogic_df):
@@ -86,9 +88,6 @@ def update_combined_ticker_and_names(factset_df, dealogic_df):
     for idx, row in dealogic_df.iterrows():
         if row['combined_ticker']:
             combined_ticker = row['combined_ticker']
-            fs_ticker_list = factset_df['FsTicker'].tolist()
-            print(f"Combined Ticker: {combined_ticker}")
-            print(f"FsTicker List: {fs_ticker_list}")
             match = factset_df[factset_df['FsTicker'] == combined_ticker]
             if not match.empty:
                 old_name = row['New_name']
