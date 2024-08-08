@@ -102,26 +102,26 @@ def update_combined_ticker_and_names(factset_df, dealogic_df):
     return pd.DataFrame(changed_names)
 
 def compare_columns(df1, df2, col1, col2):
-    results = pd.DataFrame(columns=[col1, 'Flag 10', 'Flag 3', 'Flag 2', 'Flag 1', 'Flag 0'])
+    results = pd.DataFrame(columns=[col2, 'Flag 10', 'Flag 3', 'Flag 2', 'Flag 1', 'Flag 0'])
     result_list = []
 
-    for name1 in df1[col1]:
+    for name2 in df2[col2]:
         matches = {'Flag 10': None, 'Flag 3': None, 'Flag 2': None, 'Flag 1': None, 'Flag 0': None}
 
-        for name2 in df2[col2]:
-            if name1 == name2:
-                matches['Flag 10'] = name2
-            elif name1[:3] == name2[:3] and matches['Flag 10'] is None:
-                matches['Flag 3'] = name2
-            elif name1[:2] == name2[:2] and matches['Flag 10'] is None and matches['Flag 3'] is None:
-                matches['Flag 2'] = name2
-            elif name1[:1] == name2[:1] and matches['Flag 10'] is None and matches['Flag 3'] is None and matches['Flag 2'] is None:
-                matches['Flag 1'] = name2
+        for name1 in df1[col1]:
+            if name2 == name1:
+                matches['Flag 10'] = name1
+            elif name2[:3] == name1[:3] and matches['Flag 10'] is None:
+                matches['Flag 3'] = name1
+            elif name2[:2] == name1[:2] and matches['Flag 10'] is None and matches['Flag 3'] is None:
+                matches['Flag 2'] = name1
+            elif name2[:1] == name1[:1] and matches['Flag 10'] is None and matches['Flag 3'] is None and matches['Flag 2'] is None:
+                matches['Flag 1'] = name1
             elif matches['Flag 10'] is None and matches['Flag 3'] is None and matches['Flag 2'] is None and matches['Flag 1'] is None:
-                matches['Flag 0'] = name2
+                matches['Flag 0'] = name1
 
         result_list.append({
-            col1: name1,
+            col2: name2,
             'Flag 10': matches['Flag 10'],
             'Flag 3': matches['Flag 3'],
             'Flag 2': matches['Flag 2'],
