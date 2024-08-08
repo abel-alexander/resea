@@ -42,8 +42,9 @@ def main():
             st.subheader("Names Changed Due to Ticker Logic")
             st.write(changed_names)
 
-        col1_name = st.selectbox('Select the column to compare from the first dataset:', df1.columns)
-        col2_name = st.selectbox('Select the column to compare from the second dataset:', df2.columns)
+        # Automatically select the column names for comparison
+        col1_name = 'CompanyName'
+        col2_name = 'New_name'
 
         if st.button('Compare'):
             results = compare_columns(df1, df2, col1_name, col2_name)
@@ -77,20 +78,24 @@ def clean_dataframe(df):
 
 def update_combined_ticker_and_names(factset_df, dealogic_df):
     dealogic_df['combined_ticker'] = dealogic_df.apply(
-        lambda row: f"{row['ticker_dealogic']}-{row['currency_dealogic'][:2]}" if re.match(r'^\d+$', str(row['ticker_dealogic'])) else '', axis=1)
+        lambda row: f"{row['ticker_dealogic']}-{row['currency_dealogic'][:2].upper()}" if re.match(r'^\d+$', str(row['ticker_dealogic'])) else '', axis=1)
     dealogic_df['New_name'] = dealogic_df['company_dealogic']
 
     changed_names = []
 
     for idx, row in dealogic_df.iterrows():
         if row['combined_ticker']:
-            match = factset_df[factset_df['FsTicker'] == row['combined_ticker']]
+            combined_ticker = row['combined_ticker']
+            fs_ticker_list = factset_df['FsTicker'].tolist()
+            print(f"Combined Ticker: {combined_ticker}")
+            print(f"FsTicker List: {fs_ticker_list}")
+            match = factset_df[factset_df['FsTicker'] == combined_ticker]
             if not match.empty:
                 old_name = row['New_name']
                 new_name = match['CompanyName'].values[0]
                 dealogic_df.at[idx, 'New_name'] = new_name
                 changed_names.append({
-                    'Combined Ticker': row['combined_ticker'],
+                    'Combined Ticker': combined_ticker,
                     'Old Name': old_name,
                     'New Name': new_name
                 })
