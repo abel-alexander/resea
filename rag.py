@@ -3,8 +3,9 @@ from langchain.vectorstores import FAISS
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from transformers import AutoTokenizer, LlamaForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 from sentence_transformers import SentenceTransformer
+from langchain.llms import HuggingFacePipeline
 import torch
 
 # Step 1: Load the PDF and Parse it
@@ -27,14 +28,18 @@ vectorstore = FAISS.from_documents(split_docs, embeddings)
 
 # Step 6: Set up the LLaMA Model and Tokenizer
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b")
-model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b")
+
+# Use a pipeline to create a HuggingFacePipeline LLM instance
+pipe = pipeline("text-generation", model=model, tokenizer=tokenizer, device=0)  # device=0 for GPU
+
+llm = HuggingFacePipeline(pipeline=pipe)
 
 # Step 7: Build the RAG Chain
 qa_chain = RetrievalQA.from_chain_type(
-    llm=model, 
+    llm=llm, 
     retriever=vectorstore.as_retriever(), 
-    chain_type="stuff", 
-    input_tokenizer=tokenizer
+    chain_type="stuff"
 )
 
 # Step 8: Ask a Question
