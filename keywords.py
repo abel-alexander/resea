@@ -1,104 +1,94 @@
-import streamlit as st
-import pandas as pd
-from fuzzywuzzy import fuzz
-from io import StringIO, BytesIO
+from fastapi import FastAPI, UploadFile, File, Request
+from transformers import AutoTokenizer, AutoModel, pipeline
+import torch
+from langchain.vectorstores import FAISS
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.document_loaders import PyPDFLoader
 
-def main():
-    st.title('Dataframe Comparator')
+app = FastAPI()
 
-    col1, col2 = st.columns(2)
+# Initialize Huggingface QA pipeline for question-answering
+qa_pipeline = pipeline("question-answering", model="distilbert-base-uncased-distilled-squad")
 
-    with col1:
-        st.subheader("First Dataset")
-        uploaded_file1 = st.file_uploader("Upload a CSV file", key="file1")
-        text_data1 = st.text_area("Or paste CSV data here", height=300, key="text1")
+# Vectorstore (FAISS)
+vectorstore = None
 
-    with col2:
-        st.subheader("Second Dataset")
-        uploaded_file2 = st.file_uploader("Upload a CSV file", key="file2")
-        text_data2 = st.text_area("Or paste CSV data here", height=300, key="text2")
+# Huggingface Embedding Model
+class HuggingfaceEmbeddings:
+    def __init__(self, model_name="sentence-transformers/all-mpnet-base-v2"):
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModel.from_pretrained(model_name)
 
-    df1, df2 = None, None
-
-    if uploaded_file1 or text_data1:
-        df1 = pd.read_csv(StringIO(text_data1)) if text_data1 else pd.read_csv(uploaded_file1)
-        df1 = df1.applymap(lambda s: s.lower() if type(s) is str else s)
-
-    if uploaded_file2 or text_data2:
-        df2 = pd.read_csv(StringIO(text_data2)) if text_data2 else pd.read_csv(uploaded_file2)
-        df2 = df2.applymap(lambda s: s.lower() if type(s) is str else s)
-
-    if df1 is not None and df2 is not None:
-        col1_name = st.selectbox('Select the column to compare from the first dataset:', df1.columns)
-        col2_name = st.selectbox('Select the column to compare from the second dataset:', df2.columns)
-        num_letters = st.number_input('Number of initial letters to match', min_value=1, value=4)
-        threshold = st.slider('Fuzzy similarity threshold', min_value=0, max_value=100, value=90)
-
-        if st.button('Compare'):
-            results = compare_columns(df1, df2, col1_name, col2_name, num_letters, threshold)
-            st.write(results)
-            st.download_button(
-                label="Download Results as Excel",
-                data=convert_df_to_excel(results),
-                file_name='comparison_results.xlsx',
-                mime='application/vnd.ms-excel'
-            )
-
-def compare_columns(df1, df2, col1, col2, num_letters, threshold):
-    results = pd.DataFrame(columns=[col1, 'Matched Value from Second Dataset', 'Matching Similarity', 'Matched Letters', 'Suggested Match', 'Suggested Matching Similarity'])
-    result_list = []  # Create an empty list to store result rows
-
-    for name1 in df1[col1]:
-        name1 = str(name1).replace(" ", "")  # Convert to string and remove spaces
-        best_match = None
-        best_score = 0
-        best_letters_matched = ""
-        second_best_match = None
-        second_best_score = 0
-        second_best_letters_matched = ""
-
-        for name2 in df2[col2]:
-            name2 = str(name2).replace(" ", "")  # Convert to string and remove spaces
-            score = fuzz.ratio(name1, name2)
-            # Extract the substring of the required length from both strings, ensuring you do not exceed the string length
-            sub_name1 = name1[:min(num_letters, len(name1))]
-            sub_name2 = name2[:min(num_letters, len(name2))]
-
-            # Check if the substrings match
-            if sub_name1 == sub_name2:
-                letters_matched = sub_name1
-                if score >= threshold:
-                    if score > best_score:
-                        best_score, best_match, best_letters_matched = score, name2, letters_matched
-            else:
-                letters_matched = ""
-
-            if score > second_best_score:
-                second_best_score, second_best_match, second_best_letters_matched = score, name2, letters_matched
-
-        # Create a new row as a dictionary and append to the list
-        result_list.append({
-            col1: name1,
-            'Matched Value from Second Dataset': best_match,
-            'Matching Similarity': best_score,
-            'Matched Letters': best_letters_matched,
-            'Suggested Match': second_best_match,
-            'Suggested Matching Similarity': second_best_score
-        })
-
-    # Convert the list of dicts to a DataFrame and concatenate with the main results DataFrame
-    results = pd.concat([results, pd.DataFrame(result_list)], ignore_index=True)
-
-    return results
+    def embed_documents(self, texts):
+        embeddings = []
+        for text in texts:
+            inputs = self.tokenizer(text, return_tensors="pt", padding=True, truncation=True)
+            with torch.no_grad():
+                outputs = self.model(**inputs)
+            # Use the mean of the token embeddings for the document embedding
+            embeddings.append(outputs.last_hidden_state.mean(dim=1).squeeze().numpy())
+        return embeddings
 
 
-def convert_df_to_excel(df):
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False)
-        writer.save()
-    processed_data = output.getvalue()
-    return processed_data
+# Stage 1: Process the uploaded PDF (PDF Loading, Splitting, Embedding, and Vector Storage)
+@app.post("/process_pdf")
+async def process_pdf(pdf: UploadFile = File(...)):
+    global vectorstore
 
-if __name__ == "__main__":
-    main()
+    # Load the PDF
+    loader = PyPDFLoader(pdf.file)
+    documents = loader.load()
+
+    # Split the text into chunks
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    texts = text_splitter.split_documents(documents)
+
+    # Generate embeddings using Huggingface model
+    hf_embeddings = HuggingfaceEmbeddings()
+    doc_embeddings = hf_embeddings.embed_documents([text.page_content for text in texts])
+
+    # Store the vectors in a FAISS vector store
+    vectorstore = FAISS.from_documents(documents, hf_embeddings)
+
+    return {"message": "PDF successfully processed!"}
+
+
+# Stage 2: Handle user QA query (Retrieve relevant chunks and generate response using Huggingface QA model)
+@app.post("/ask_question")
+async def ask_question(request: Request):
+    global vectorstore
+    data = await request.json()
+    query = data['query']
+
+    # Retrieve relevant documents from the vectorstore
+    retrieved_docs = vectorstore.similarity_search(query)
+
+    # Combine the relevant document chunks into a single context
+    context = " ".join([doc.page_content for doc in retrieved_docs])
+
+    # Use Huggingface QA pipeline to answer the query based on the context
+    answer = qa_pipeline(question=query, context=context)
+
+    return {"answer": answer["answer"]}
+
+
+# Stage 3: Generate a highlighted PDF (map retrieved chunks to PDF and highlight)
+@app.post("/get_highlighted_pdf")
+async def get_highlighted_pdf(request: Request):
+    global vectorstore
+    data = await request.json()
+    query = data['query']
+
+    # Retrieve relevant documents from the vectorstore
+    retrieved_docs = vectorstore.similarity_search(query)
+
+    # Highlight relevant sections in the original PDF
+    highlighted_pdf_url = generate_highlighted_pdf(retrieved_docs)
+
+    return {"pdf_url": highlighted_pdf_url}
+
+
+# Helper function for generating highlighted PDFs (to be implemented)
+def generate_highlighted_pdf(retrieved_docs):
+    # Use PyMuPDF or similar library to highlight the relevant sections in the PDF
+    pass
