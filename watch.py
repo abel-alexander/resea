@@ -1,95 +1,65 @@
-import fitz  # PyMuPDF
-from PIL import Image
-import pytesseract
-import os
-import io
+import gradio as gr
+import requests
 
-def is_text_page(page):
-    text = page.get_text()
-    return bool(text.strip())
+# API Endpoints
+API_BASE_URL = "http://127.0.0.1:8000"  # Replace with your FastAPI base URL
 
-def ocr_image(image):
-    return pytesseract.image_to_string(image)
+# Function to handle the PDF upload (Stage 1)
+def upload_pdf(pdf):
+    pdf_file = pdf.name
+    with open(pdf_file, "rb") as f:
+        pdf_bytes = f.read()
 
-def convert_pdf_to_images(pdf_path, start_page, end_page, output_folder):
-    pdf_document = fitz.open(pdf_path)
-    ocr_text = ""
-
-    for page_num in range(start_page - 1, end_page):
-        if page_num < 0 or page_num >= pdf_document.page_count:
-            print(f"Page number {page_num} is out of range")
-            continue
-
-        page = pdf_document.load_page(page_num)
-        pix = page.get_pixmap()
-        image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-        
-        image_path = os.path.join(output_folder, f"page_{page_num + 1}.png")
-        image.save(image_path)
-        print(f"Page {page_num + 1} saved as {image_path}")
-
-        # Perform OCR on the saved image and accumulate the text
-        ocr_text += ocr_image(image)
+    # Send the PDF to the backend API for processing
+    response = requests.post(f"{API_BASE_URL}/process_pdf", files={"pdf": pdf_bytes})
     
-    return ocr_text
-
-def extract_text_from_section(pdf_document, start_page, end_page, ocr=False, output_folder=None):
-    section_text = ""
-
-    if ocr:
-        section_text = convert_pdf_to_images(pdf_document.name, start_page, end_page, output_folder)
+    if response.status_code == 200:
+        return "PDF successfully processed!"
     else:
-        for page_num in range(start_page - 1, end_page):
-            page = pdf_document.load_page(page_num)
-            if is_text_page(page):
-                section_text += page.get_text()
+        return f"Failed to process PDF: {response.text}"
+
+# Function to handle the QA query (Stage 2)
+def ask_question(query):
+    # Send the query to the backend API
+    response = requests.post(f"{API_BASE_URL}/ask_question", json={"query": query})
     
-    return section_text
+    if response.status_code == 200:
+        return response.json()["answer"]
+    else:
+        return f"Failed to get an answer: {response.text}"
 
-def extract_and_save_text(document_sections, output_base_path):
-    for doc_info in document_sections:
-        file_path = doc_info['file_path']
-        sections = doc_info['sections']
-        pdf_document = fitz.open(file_path)
+# Function to retrieve the highlighted PDF (Stage 3)
+def get_highlighted_pdf(query):
+    # Send the query to the backend API to get the highlighted PDF
+    response = requests.post(f"{API_BASE_URL}/get_highlighted_pdf", json={"query": query})
+    
+    if response.status_code == 200:
+        return response.json().get("pdf_url", "Could not generate highlighted PDF")
+    else:
+        return f"Failed to get highlighted PDF: {response.text}"
 
-        for section in sections:
-            title = section['title']
-            start_page = section['start_page']
-            end_page = section['end_page']
-            ocr = section.get('ocr', False)
+# Gradio interface for the three stages
+with gr.Blocks() as demo:
+    gr.Markdown("## Stage 1: Upload PDF")
+    pdf_input = gr.File(label="Upload your PDF")
+    upload_button = gr.Button("Upload and Process PDF")
+    upload_output = gr.Textbox(label="Output")
 
-            # Create directory for the section if it doesn't exist
-            section_dir = os.path.join(output_base_path, title)
-            os.makedirs(section_dir, exist_ok=True)
+    upload_button.click(upload_pdf, inputs=pdf_input, outputs=upload_output)
 
-            # Extract text from the section
-            section_text = extract_text_from_section(pdf_document, start_page, end_page, ocr=ocr, output_folder=section_dir)
+    gr.Markdown("## Stage 2: Ask a Question")
+    query_input = gr.Textbox(label="Enter your query")
+    ask_button = gr.Button("Ask Question")
+    answer_output = gr.Textbox(label="Answer")
 
-            # Save the extracted text to a file within the section directory
-            document_name = os.path.basename(file_path).replace('.pdf', '.txt')
-            output_file_path = os.path.join(section_dir, document_name)
-            with open(output_file_path, 'w', encoding='utf-8') as output_file:
-                output_file.write(section_text)
-            print(f"Extracted text for section '{title}' in document '{file_path}' saved as '{output_file_path}'")
+    ask_button.click(ask_question, inputs=query_input, outputs=answer_output)
 
-# Example usage
-document_sections = [
-    {
-        'file_path': 'doc1.pdf',
-        'sections': [
-            {'title': 'Section A', 'start_page': 2, 'end_page': 5, 'ocr': True},
-            {'title': 'Section B', 'start_page': 6, 'end_page': 10, 'ocr': False},
-        ]
-    },
-    {
-        'file_path': 'doc2.pdf',
-        'sections': [
-            {'title': 'Section A', 'start_page': 4, 'end_page': 8, 'ocr': True},
-            {'title': 'Section C', 'start_page': 9, 'end_page': 12, 'ocr': False},
-        ]
-    },
-    # Add more documents and sections as needed
-]
+    gr.Markdown("## Stage 3: Get Highlighted PDF")
+    query_input_2 = gr.Textbox(label="Enter your query (for PDF highlighting)")
+    highlight_button = gr.Button("Get Highlighted PDF")
+    highlight_output = gr.Textbox(label="Highlighted PDF URL")
 
-output_base_path = 'output_sections'
-extract_and_save_text(document_sections, output_base_path)
+    highlight_button.click(get_highlighted_pdf, inputs=query_input_2, outputs=highlight_output)
+
+# Launch Gradio app
+demo.launch()
