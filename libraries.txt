@@ -1,0 +1,93 @@
+Libraries and Their Usage:
+unidecode: Converts Unicode text (with accents or other special characters) to ASCII format, often used in text normalization processes.
+
+re: The regular expression library in Python for string pattern matching, substitution, and manipulation.
+
+defaultdict (from collections): A dictionary subclass that provides default values for missing keys when accessed.
+
+plotly.graph_objs: Part of the Plotly library, used for building interactive visualizations and offering more control over the specific plot objects.
+
+Counter (from collections): A specialized dictionary for counting hashable objects, useful for counting occurrences of items in an iterable.
+
+en_core_web_md: This is a medium-sized SpaCy language model used for natural language processing tasks such as named entity recognition (NER) and tokenization.
+
+matplotlib.pyplot (plt): A foundational plotting library in Python used for creating static, animated, and interactive visualizations.
+
+matplotlib.colors: Provides functions for manipulating colors in matplotlib, enabling custom color palettes for plotting.
+
+pandas (pd): A powerful data analysis and manipulation library that provides data structures like Series and DataFrame, useful for working with structured data.
+
+plotly.express (px): A higher-level interface for Plotly that simplifies the creation of common visualizations.
+
+pycountry: A module that allows access to ISO country codes, names, and country-related information.
+
+streamlit (st): A library for creating simple, interactive web applications for data science. It provides an intuitive interface to display data visualizations, text, and inputs.
+
+fuzzywuzzy: A library for fuzzy string matching based on the Levenshtein Distance algorithm, useful for comparing strings for similarity.
+
+gensim.corpora: A module from the Gensim library used for working with corpora (collections of texts), such as transforming text into a bag-of-words model for topic modeling and other NLP tasks.
+
+WordNetLemmatizer (from nltk.stem.wordnet): A lemmatizer from NLTK that reduces words to their base or root form using WordNet’s lexical database.
+
+string: Python’s built-in string module that provides functions for common string operations.
+
+nltk: The Natural Language Toolkit (NLTK), used for a wide range of NLP tasks such as tokenization, stemming, and working with corpora.
+
+ngrams (from nltk): Generates n-grams (sequence of 'n' words) from text data, useful for analyzing co-occurrences of words in text.
+
+nltk.corpus.stopwords: Provides lists of stopwords in different languages that are typically filtered out in NLP tasks.
+
+SentimentIntensityAnalyzer (from nltk.sentiment.vader): A tool for performing sentiment analysis based on VADER, commonly used for assessing the sentiment of short pieces of text such as social media posts.
+
+word_tokenize (from nltk.tokenize): Tokenizes text into words, splitting a string into individual words.
+
+WordCloud (from wordcloud): A tool for generating word clouds from text, where the size of each word reflects its frequency or importance.
+
+PhraseMatcher (from spacy.matcher): A fast and efficient matcher from SpaCy for finding phrases (sequences of words) in text.
+
+w2n (from word2number): A module that converts written numbers (e.g., "twenty-five") into digit format (e.g., "25").
+
+
+Key Imports and Their Usage:
+nltk: The script uses NLTK for natural language processing. The function load_nltk_data() downloads essential resources for tokenization, stopwords, tagging, and sentiment analysis.
+
+pandas (pd): This is used for data manipulation and analysis, though it is not used directly in the visible portion of the code.
+
+streamlit (st): This is a library for building web applications quickly. The script uses Streamlit for displaying a simple interface where users can choose options from a sidebar.
+
+page2: This file is imported but its contents are not shown in the image. It likely contains additional functionality or Streamlit components related to the app.
+
+yaml: YAML is used to load configuration files. The load_config_yaml() function reads a .yaml configuration file that can be used to define settings for the app.
+
+Functions:
+load_config_yaml(config_file): Reads a YAML file containing configuration data for the Streamlit app. It uses the yaml.safe_load() function to parse the contents.
+
+load_nltk_data(): Downloads the necessary NLTK resources like tokenizers (punkt), stopwords, wordnet, etc., needed for text processing.
+
+re: This is the regular expression library in Python. It is used for string matching, substitution, and manipulation based on patterns.
+
+collections.defaultdict: Part of the collections module, defaultdict is a dictionary subclass that calls a factory function to supply missing values when accessed.
+
+plotly.graph_objs & plotly.express: Plotly is a graphing library for creating interactive charts. graph_objs allows for more fine-grained control over chart elements, while express is a simpler interface for quickly generating common plots.
+
+Counter (from collections): A subclass of dictionary for counting hashable objects, useful for tallying occurrences in an iterable.
+
+en_core_web_md: This is a medium-sized English language model from SpaCy used for natural language processing (NLP) tasks like named entity recognition (NER) and part-of-speech tagging.
+
+pycountry: A module for working with country codes, names, and other country-related information.
+
+fuzzywuzzy: A library for fuzzy string matching using the Levenshtein Distance algorithm, which measures the difference between two sequences.
+
+nltk.ngrams: From the Natural Language Toolkit (NLTK), ngrams is used for generating n-grams from text, useful in NLP tasks.
+
+nltk.corpus.stopwords: Provides access to lists of common stopwords (words frequently ignored in text processing) in various languages.
+
+nltk.sentiment.vader.SentimentIntensityAnalyzer: A sentiment analysis tool based on VADER (Valence Aware Dictionary and sEntiment Reasoner), which is tuned for social media and text sentiment classification.
+
+nltk.tokenize.word_tokenize: A tokenizer function from NLTK that splits text into words.
+
+spacy.matcher.PhraseMatcher: A component of SpaCy’s NLP toolkit used for efficiently matching sequences of words (phrases) in text.
+
+pandas (pd): A powerful data analysis and manipulation library for Python. It provides data structures like DataFrames for managing and analyzing structured data.
+
+unidecode: A library that converts Unicode text to plain ASCII, often used to handle special characters and accents in text data.
