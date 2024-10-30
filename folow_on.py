@@ -42,10 +42,21 @@ qa_chain = RetrievalQA.from_chain_type(
     retriever=faiss_index.as_retriever(),
     return_source_documents=True
 )
+# Step 5: Define the Prompt Template and Query the Model
+prompt_template = (
+    "You are an expert AI model that provides concise, accurate answers based on the following question: "
+    "{question}\n\nAnswer:"
+)
 
-# Step 5: Query the Model
-query = "Your question here"  # Replace with your question
-result = qa_chain({"query": query})
+def ask_question(query):
+    # Format the query with the prompt template
+    formatted_query = prompt_template.format(question=query)
+    result = qa_chain({"query": formatted_query})
+    return result
+
+# Example usage: replace with your actual question
+query = "What is the main theme of the document?"  # Replace with your question
+result = ask_question(query)
 
 # Output answer and source documents
 print("Answer:", result["result"])
