@@ -1,13 +1,47 @@
-# Define the system prompt
-system_prompt = """
-You are a highly knowledgeable and precise assistant tasked with answering questions from investment bankers. You will be provided with text files that may contain typos, poorly formatted table data, and other imperfections. Follow these guidelines to ensure accuracy and completeness in your responses:
+from rouge_score import rouge_scorer  # Make sure to install rouge_score library if not already
 
-1. Thoroughly Read the Text: Before answering any question, carefully read through the entire provided text file. Ensure you understand the context and details fully.
-2. Error Handling and Correction: Automatically correct or interpret any typos, poorly formatted data, or other imperfections to provide accurate answers.
-3. Maintain Accuracy: Provide accurate and complete answers. Base your answers strictly on the corrected information in the text.
-4. Clarify When Necessary: If the information is unclear or insufficient even after correction, specify this clearly.
+# Define a function to calculate ROUGE score
+def calculate_rouge(output, reference):
+    scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
+    scores = scorer.score(reference, output)
+    return scores
 
-Example:
-Question: "What is the projected growth rate for Q3 2024?"
-Answer: "Based on the corrected information from the text, the projected growth rate for Q3 2024 is 5%. There were some typos and formatting issues in the original text that have been corrected for accuracy."
-"""
+# Existing code
+files = ["file1.pdf", "file2.pdf", ...]  # your files
+for file in files:
+    st.session_state.pdf_file_name = file
+    file_name = f'/path/to/your/files/{file}'  # Update this path as needed
+
+    st.subheader(file)
+    q = qa.get_q(i)
+    while q != "not found":
+        start_time = time.process_time()
+        with col_llama:
+            rs_llama = mistral.qa2(file_name, q)
+            end_time = time.process_time()
+            inference_time_llama = end_time - start_time
+            st.text(rs_llama)
+            st.markdown(rs_llama)
+
+        with col_llama2:
+            start_time = time.process_time()
+            rs_llama2 = mistral.test_qa(file_name, q)
+            end_time = time.process_time()
+            inference_time_llama2 = end_time - start_time
+            st.text(rs_llama2)
+            st.markdown(rs_llama2)
+
+        # Display inference times
+        st.write(f"Inference Time (Col Llama): {inference_time_llama} seconds")
+        st.write(f"Inference Time (Col Llama2): {inference_time_llama2} seconds")
+
+        # Calculate ROUGE scores between outputs of two columns
+        rouge_scores = calculate_rouge(rs_llama, rs_llama2)
+        st.write("ROUGE Scores:")
+        st.write(f"ROUGE-1: {rouge_scores['rouge1'].fmeasure}")
+        st.write(f"ROUGE-2: {rouge_scores['rouge2'].fmeasure}")
+        st.write(f"ROUGE-L: {rouge_scores['rougeL'].fmeasure}")
+
+        # Proceed to the next question
+        i += 1
+        q = qa.get_q(i)
