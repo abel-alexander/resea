@@ -1,103 +1,65 @@
-import os
-from pdf2image import convert_from_path
-from PIL import Image
-import pytesseract
-import PyPDF2
+import pandas as pd
+from rouge_score import rouge_scorer
 
-# Path to the PDF file
-pdf_path = 'your_pdf_file.pdf'
-
-# Directory to save images
-image_dir = 'pdf_images'
-os.makedirs(image_dir, exist_ok=True)
-
-# Define the page range to extract (e.g., pages 440 to 444)
-start_page = 440
-end_page = 444
-
-# Convert specific pages of PDF to images
-images = convert_from_path(pdf_path, first_page=start_page, last_page=end_page)
-image_paths = []
-
-for i, image in enumerate(images):
-    page_number = start_page + i
-    image_path = os.path.join(image_dir, f'page_{page_number}.png')
-    image.save(image_path, 'PNG')
-    image_paths.append(image_path)
-
-# Extract text from images using pytesseract
-extracted_texts = []
-
-for i, image_path in enumerate(image_paths):
-    text = pytesseract.image_to_string(Image.open(image_path))
-    extracted_texts.append({
-        'page_number': start_page + i,
-        'image_path': image_path,
-        'text': text
-    })
-
-# Combine all extracted text into a single string (for convenience)
-full_text = "\n".join([entry['text'] for entry in extracted_texts])
-
-# Print the extracted text
-print(full_text)
-
-# Optionally, save the extracted text and metadata to a file
-with open('extracted_text_with_metadata.txt', 'w') as text_file:
-    for entry in extracted_texts:
-        text_file.write(f"Page {entry['page_number']} (Image: {entry['image_path']}):\n")
-        text_file.write(entry['text'])
-        text_file.write("\n" + "-"*80 + "\n")
-
-# Extract PDF metadata using PyPDF2
-with open(pdf_path, 'rb') as file:
-    reader = PyPDF2.PdfFileReader(file)
-    pdf_metadata = reader.getDocumentInfo()
-
-# Print PDF metadata
-for key, value in pdf_metadata.items():
-    print(f'{key}: {value}')
-
-# Optionally, save PDF metadata to a file
-with open('pdf_metadata.txt', 'w') as meta_file:
-    for key, value in pdf_metadata.items():
-        meta_file.write(f'{key}: {value}\n')
-
-
-
-
-
-import fitz  # PyMuPDF
-from PIL import Image
-
-def convert_pdf_to_images(pdf_path, pages, output_folder):
-    # Open the PDF
-    pdf_document = fitz.open(pdf_path)
+def calculate_rouge_scores(text_pairs):
+    """
+    Takes a list of pairs of texts and returns a DataFrame with each text in separate columns
+    and multiple ROUGE scores (ROUGE-1, ROUGE-2, ROUGE-L) in additional columns.
     
-    for page_num in pages:
-        # Ensure the page number is within the PDF
-        if page_num < 0 or page_num >= pdf_document.page_count:
-            print(f"Page number {page_num} is out of range")
-            continue
+    Parameters:
+    text_pairs (list of tuples): List where each element is a tuple containing two texts.
+    
+    Returns:
+    pd.DataFrame: DataFrame with columns 'Text1', 'Text2', and ROUGE scores (precision, recall, and F1).
+    """
+    # Initialize a DataFrame with each text in separate columns
+    df = pd.DataFrame(text_pairs, columns=['Text1', 'Text2'])
 
-        # Select the page
-        page = pdf_document.load_page(page_num)
+    # Initialize the ROUGE scorer with the metrics we want to calculate
+    scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
+
+    # Calculate ROUGE scores for each pair and store them in lists
+    rouge1_precision, rouge1_recall, rouge1_f1 = [], [], []
+    rouge2_precision, rouge2_recall, rouge2_f1 = [], [], []
+    rougeL_precision, rougeL_recall, rougeL_f1 = [], [], []
+
+    for text1, text2 in text_pairs:
+        scores = scorer.score(text1, text2)
         
-        # Render the page to a pixmap
-        pix = page.get_pixmap()
+        # ROUGE-1
+        rouge1_precision.append(scores['rouge1'].precision)
+        rouge1_recall.append(scores['rouge1'].recall)
+        rouge1_f1.append(scores['rouge1'].fmeasure)
         
-        # Convert to PIL Image
-        image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        # ROUGE-2
+        rouge2_precision.append(scores['rouge2'].precision)
+        rouge2_recall.append(scores['rouge2'].recall)
+        rouge2_f1.append(scores['rouge2'].fmeasure)
         
-        # Save the image
-        image_path = f"{output_folder}/page_{page_num + 1}.png"
-        image.save(image_path)
-        print(f"Page {page_num + 1} saved as {image_path}")
+        # ROUGE-L
+        rougeL_precision.append(scores['rougeL'].precision)
+        rougeL_recall.append(scores['rougeL'].recall)
+        rougeL_f1.append(scores['rougeL'].fmeasure)
+    
+    # Add the ROUGE scores to the DataFrame
+    df['ROUGE-1 Precision'] = rouge1_precision
+    df['ROUGE-1 Recall'] = rouge1_recall
+    df['ROUGE-1 F1'] = rouge1_f1
+    df['ROUGE-2 Precision'] = rouge2_precision
+    df['ROUGE-2 Recall'] = rouge2_recall
+    df['ROUGE-2 F1'] = rouge2_f1
+    df['ROUGE-L Precision'] = rougeL_precision
+    df['ROUGE-L Recall'] = rougeL_recall
+    df['ROUGE-L F1'] = rougeL_f1
 
-# Example usage
-pdf_path = 'your_pdf_file.pdf'
-pages = [0, 2, 4]  # page numbers to convert (0-indexed)
-output_folder = 'output_images'
+    return df
 
-convert_pdf_to_images(pdf_path, pages, output_folder)
+# Example usage:
+text_pairs = [
+    ("This is a sample text.", "This is another example of text."),
+    ("Data science is great.", "Machine learning is a subset of data science."),
+    ("Hello world!", "Hello, how are you?")
+]
 
+df = calculate_rouge_scores(text_pairs)
+print(df)
