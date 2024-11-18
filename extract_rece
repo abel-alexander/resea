@@ -1,4 +1,3 @@
-import pandas as pd
 import csv
 import time
 
@@ -20,27 +19,30 @@ with open(output_file, mode='w', newline='', encoding='utf-8') as file:
         'Token_Length_Mistral'
     ])
 
-# Process questions and save directly in the loop
+# Process files and questions
 for file in files:
     q = qa.get_q(i)  # Dynamically get question
     while q:  # Process each question
-        # Timing and inference for llama_v1
+        # Timing and inference for Llama v1 (mistral.qa2)
         start_time = time.process_time()
-        col_llama = llama1_qa(file_name, q)  # Call Llama v1 inference
+        with col1:
+            col_llama = mistral.qa2(file_name, q)  # Call Llama v1 inference
         end_time = time.process_time()
         time_llama_v1 = end_time - start_time
         token_length_llama_v1 = len(col_llama.split())
 
-        # Timing and inference for llama_v2
+        # Timing and inference for Llama v2 (mistral.qa3)
         start_time = time.process_time()
-        col_llama2 = llama2_qa(file_name, q)  # Call Llama v2 inference
+        with col2:
+            col_llama2 = mistral.qa3(file_name, q)  # Call Llama v2 inference
         end_time = time.process_time()
         time_llama_v2 = end_time - start_time
         token_length_llama_v2 = len(col_llama2.split())
 
-        # Timing and inference for mistral
+        # Timing and inference for Mistral (mistral.qa2)
         start_time = time.process_time()
-        col_mistral = mistral_qa(file_name, q)  # Call Mistral inference
+        with col3:
+            col_mistral = mistral.qa2(file_name, q)  # Call Mistral inference
         end_time = time.process_time()
         time_mistral = end_time - start_time
         token_length_mistral = len(col_mistral.split())
