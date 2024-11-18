@@ -1,67 +1,31 @@
-import csv
 import time
 
-# Initialize the CSV file with headers before the loop
-output_file = 'responses_with_details.csv'
-with open(output_file, mode='w', newline='', encoding='utf-8') as file:
-    writer = csv.writer(file)
-    # Write header row
-    writer.writerow([
-        'Question', 
-        'Llama_v1_Response', 
-        'Llama_v2_Response', 
-        'Mistral_Response', 
-        'Inference_Time_Llama_v1 (s)', 
-        'Inference_Time_Llama_v2 (s)', 
-        'Inference_Time_Mistral (s)', 
-        'Token_Length_Llama_v1', 
-        'Token_Length_Llama_v2', 
-        'Token_Length_Mistral'
-    ])
+# Function to process the DataFrame
+def process_dataframe(df):
+    for idx, row in df.iterrows():
+        # Extract filename and question
+        filename = row['Filename']
+        question = row['Questions']
 
-# Process files and questions
-for file in files:
-    q = qa.get_q(i)  # Dynamically get question
-    while q:  # Process each question
-        # Timing and inference for Llama v1 (mistral.qa2)
+        # Skip rows where the Llama3-v1 column is already filled
+        if not pd.isna(row['Llama3-v1']):
+            continue
+
+        # Call mistral.qa2 and measure time taken
         start_time = time.process_time()
-        with col1:
-            col_llama = mistral.qa2(file_name, q)  # Call Llama v1 inference
+        output = mistral.qa2(f"{filename}.pdf", question)  # Assuming filename includes .pdf
         end_time = time.process_time()
-        time_llama_v1 = end_time - start_time
-        token_length_llama_v1 = len(col_llama.split())
+        
+        # Parse the output
+        parsed_output = parse_output(output)
 
-        # Timing and inference for Llama v2 (mistral.qa3)
-        start_time = time.process_time()
-        with col2:
-            col_llama2 = mistral.qa3(file_name, q)  # Call Llama v2 inference
-        end_time = time.process_time()
-        time_llama_v2 = end_time - start_time
-        token_length_llama_v2 = len(col_llama2.split())
+        # Update the DataFrame
+        df.at[idx, 'Llama3-v1'] = parsed_output
+        df.at[idx, 'time taken'] = end_time - start_time
+        df.at[idx, 'token len'] = len(parsed_output.split())
 
-        # Timing and inference for Mistral (mistral.qa2)
-        start_time = time.process_time()
-        with col3:
-            col_mistral = mistral.qa2(file_name, q)  # Call Mistral inference
-        end_time = time.process_time()
-        time_mistral = end_time - start_time
-        token_length_mistral = len(col_mistral.split())
+    return df
 
-        # Write data directly to CSV
-        with open(output_file, mode='a', newline='', encoding='utf-8') as file:
-            writer = csv.writer(file)
-            writer.writerow([
-                q, 
-                col_llama, 
-                col_llama2, 
-                col_mistral, 
-                time_llama_v1, 
-                time_llama_v2, 
-                time_mistral, 
-                token_length_llama_v1, 
-                token_length_llama_v2, 
-                token_length_mistral
-            ])
-
-        # Get the next question
-        q = qa.get_q(i)
+# Example usage
+# Assuming `df` is your DataFrame with the specified columns
+df = process_dataframe(df)
