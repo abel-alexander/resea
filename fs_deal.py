@@ -1,5 +1,6 @@
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from nltk.translate.meteor_score import meteor_score
+from nltk.tokenize import word_tokenize  # Tokenizer for pre-tokenization
 
 # GPU cost constants
 NUM_GPUS = 3  # Number of GPUs used
@@ -24,16 +25,20 @@ def calculate_metrics_with_gpu_cost(df):
             gpu_costs.append(None)
             continue
 
+        # Tokenize reference and hypothesis
+        tokenized_reference = word_tokenize(reference)
+        tokenized_hypothesis = word_tokenize(hypothesis)
+
         # Sentence BLEU Score
         bleu = sentence_bleu(
-            [reference.split()], 
-            hypothesis.split(), 
+            [tokenized_reference], 
+            tokenized_hypothesis, 
             smoothing_function=smoothing_function
         )
         bleu_scores.append(bleu)
 
-        # METEOR Score
-        meteor = meteor_score([reference], hypothesis)
+        # METEOR Score (requires tokenized input)
+        meteor = meteor_score([tokenized_reference], tokenized_hypothesis)
         meteor_scores.append(meteor)
 
         # GPU Cost Calculation
