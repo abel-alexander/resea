@@ -1,144 +1,60 @@
-import streamlit as st
-import pandas as pd
-from io import BytesIO
-import re
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
+from datasets import load_metric
 
-def main():
-    st.title('Dataframe Comparator')
+# Load METEOR metric
+meteor_metric = load_metric("meteor")
 
-    # Commenting out the upload option
-    # col1, col2 = st.columns(2)
+# GPU Cost Constants
+NUM_GPUS = 3  # Number of GPUs
+GPU_COST_PER_HOUR = 3  # Cost per GPU per hour in USD
 
-    # with col1:
-    #     st.subheader("First Dataset (Factset)")
-    #     uploaded_file1 = st.file_uploader("Upload an Excel file", type=["xlsx"], key="file1")
+# Function to calculate metrics
+def calculate_metrics(df):
+    smoothing_function = SmoothingFunction().method1  # For BLEU smoothing
+    bleu_scores = []
+    meteor_scores = []
+    gpu_costs = []
 
-    # with col2:
-    #     st.subheader("Second Dataset (Dealogic)")
-    #     uploaded_file2 = st.file_uploader("Upload an Excel file", type=["xlsx"], key="file2")
+    for idx, row in df.iterrows():
+        # Reference and hypothesis
+        reference = row['Reference']
+        hypothesis = row['Llama3-v1']
 
-    df1, df2 = None, None
+        # Skip if hypothesis or reference is missing
+        if pd.isna(reference) or pd.isna(hypothesis):
+            bleu_scores.append(None)
+            meteor_scores.append(None)
+            gpu_costs.append(None)
+            continue
 
-    # Replace with directory path
-    file_path1 = 'path/to/factset.xlsx'  # Update this path
-    file_path2 = 'path/to/dealogic.xlsx'  # Update this path
+        # BLEU Score
+        bleu = sentence_bleu(
+            [reference.split()], 
+            hypothesis.split(), 
+            smoothing_function=smoothing_function
+        )
+        bleu_scores.append(bleu)
 
-    # Load the Excel files directly from the specified path
-    df1 = load_excel(file_path1)
-    if df1 is not None:
-        df1 = clean_dataframe(df1, exclude_columns=['FsTicker'])
-    else:
-        st.error("Error reading the first file. Please check the file format and encoding.")
+        # METEOR Score
+        meteor = meteor_metric.compute(
+            predictions=[hypothesis], 
+            references=[reference]
+        )['meteor']
+        meteor_scores.append(meteor)
 
-    df2 = load_excel(file_path2)
-    if df2 is not None:
-        df2 = clean_dataframe(df2)
-    else:
-        st.error("Error reading the second file. Please check the file format and encoding.")
+        # GPU Cost
+        time_taken = row['time taken']  # In seconds
+        time_in_hours = time_taken / 3600  # Convert to hours
+        gpu_cost = NUM_GPUS * time_in_hours * GPU_COST_PER_HOUR
+        gpu_costs.append(gpu_cost)
 
-    if df1 is not None and df2 is not None:
-        if 'FsTicker' in df1.columns and 'ticker_dealogic' in df2.columns and 'currency_dealogic' in df2.columns:
-            changed_names = update_combined_ticker_and_names(df1, df2)
-            st.subheader("Names Changed Due to Ticker Logic")
-            st.write(changed_names)
+    # Add metrics to the DataFrame
+    df['BLEU'] = bleu_scores
+    df['METEOR'] = meteor_scores
+    df['GPU Cost'] = gpu_costs
 
-        # Automatically select the column names for comparison
-        col1_name = 'CompanyName'
-        col2_name = 'New_name'
-
-        if st.button('Compare'):
-            results = compare_columns(df1, df2, col1_name, col2_name)
-            st.write(results)
-            st.download_button(
-                label="Download Results as Excel",
-                data=convert_df_to_excel(results),
-                file_name='comparison_results.xlsx',
-                mime='application/vnd.ms-excel'
-            )
-
-def load_excel(file_path):
-    try:
-        return pd.read_excel(file_path)
-    except Exception as e:
-        st.error(f"Error reading the file: {e}")
-        return None
-
-def clean_text(text):
-    text = text.lower()
-    text = re.sub(r'\bcorporation\b', 'corp', text)
-    text = re.sub(r'\blimited\b', 'ltd', text)
-    text = re.sub(r'[^a-z0-9\s]', '', text)
-    text = re.sub(r'\(.*?\)', '', text)
-    text = text.strip()
-    return text
-
-def clean_dataframe(df, exclude_columns=[]):
-    for column in df.columns:
-        if column not in exclude_columns:
-            df[column] = df[column].apply(lambda s: clean_text(s) if type(s) is str else s)
     return df
 
-def update_combined_ticker_and_names(factset_df, dealogic_df):
-    dealogic_df['combined_ticker'] = dealogic_df.apply(
-        lambda row: f"{row['ticker_dealogic']}-{row['currency_dealogic'][:2].upper()}" if re.match(r'^\d+$', str(row['ticker_dealogic'])) else '', axis=1)
-    dealogic_df['New_name'] = dealogic_df['company_dealogic']
-
-    changed_names = []
-
-    for idx, row in dealogic_df.iterrows():
-        if row['combined_ticker']:
-            combined_ticker = row['combined_ticker']
-            match = factset_df[factset_df['FsTicker'] == combined_ticker]
-            if not match.empty:
-                old_name = row['New_name']
-                new_name = match['CompanyName'].values[0]
-                dealogic_df.at[idx, 'New_name'] = new_name
-                changed_names.append({
-                    'Combined Ticker': combined_ticker,
-                    'Old Name': old_name,
-                    'New Name': new_name
-                })
-
-    return pd.DataFrame(changed_names)
-
-def compare_columns(df1, df2, col1, col2):
-    results = pd.DataFrame(columns=[col2, 'Flag 10', 'Flag 3', 'Flag 2', 'Flag 1', 'Flag 0'])
-    result_list = []
-
-    for name2 in df2[col2]:
-        matches = {'Flag 10': None, 'Flag 3': None, 'Flag 2': None, 'Flag 1': None, 'Flag 0': None}
-
-        for name1 in df1[col1]:
-            if name2 == name1:
-                matches['Flag 10'] = name1
-            elif name2[:3] == name1[:3] and matches['Flag 10'] is None:
-                matches['Flag 3'] = name1
-            elif name2[:2] == name1[:2] and matches['Flag 10'] is None and matches['Flag 3'] is None:
-                matches['Flag 2'] = name1
-            elif name2[:1] == name1[:1] and matches['Flag 10'] is None and matches['Flag 3'] is None and matches['Flag 2'] is None:
-                matches['Flag 1'] = name1
-            elif matches['Flag 10'] is None and matches['Flag 3'] is None and matches['Flag 2'] is None and matches['Flag 1'] is None:
-                matches['Flag 0'] = name1
-
-        result_list.append({
-            col2: name2,
-            'Flag 10': matches['Flag 10'],
-            'Flag 3': matches['Flag 3'],
-            'Flag 2': matches['Flag 2'],
-            'Flag 1': matches['Flag 1'],
-            'Flag 0': matches['Flag 0']
-        })
-
-    results = pd.concat([results, pd.DataFrame(result_list)], ignore_index=True)
-    return results
-
-def convert_df_to_excel(df):
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False)
-        writer.save()
-    processed_data = output.getvalue()
-    return processed_data
-
-if __name__ == "__main__":
-    main()
+# Example usage
+# Assuming `df` is your DataFrame with the specified columns
+df = calculate_metrics(df)
