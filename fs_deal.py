@@ -1,15 +1,12 @@
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
-from datasets import load_metric
+from nltk.translate.meteor_score import meteor_score
 
-# Load METEOR metric
-meteor_metric = load_metric("meteor")
-
-# GPU Cost Constants
-NUM_GPUS = 3  # Number of GPUs
+# GPU cost constants
+NUM_GPUS = 3  # Number of GPUs used
 GPU_COST_PER_HOUR = 3  # Cost per GPU per hour in USD
 
 # Function to calculate metrics
-def calculate_metrics(df):
+def calculate_metrics_with_gpu_cost(df):
     smoothing_function = SmoothingFunction().method1  # For BLEU smoothing
     bleu_scores = []
     meteor_scores = []
@@ -27,7 +24,7 @@ def calculate_metrics(df):
             gpu_costs.append(None)
             continue
 
-        # BLEU Score
+        # Sentence BLEU Score
         bleu = sentence_bleu(
             [reference.split()], 
             hypothesis.split(), 
@@ -36,15 +33,12 @@ def calculate_metrics(df):
         bleu_scores.append(bleu)
 
         # METEOR Score
-        meteor = meteor_metric.compute(
-            predictions=[hypothesis], 
-            references=[reference]
-        )['meteor']
+        meteor = meteor_score([reference], hypothesis)
         meteor_scores.append(meteor)
 
-        # GPU Cost
+        # GPU Cost Calculation
         time_taken = row['time taken']  # In seconds
-        time_in_hours = time_taken / 3600  # Convert to hours
+        time_in_hours = time_taken / 3600  # Convert time to hours
         gpu_cost = NUM_GPUS * time_in_hours * GPU_COST_PER_HOUR
         gpu_costs.append(gpu_cost)
 
@@ -57,4 +51,4 @@ def calculate_metrics(df):
 
 # Example usage
 # Assuming `df` is your DataFrame with the specified columns
-df = calculate_metrics(df)
+df = calculate_metrics_with_gpu_cost(df)
