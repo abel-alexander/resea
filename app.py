@@ -1,125 +1,88 @@
+import easyocr
 import pandas as pd
-import re
-from word2number import w2n
-from collections import defaultdict
-
-# Example data including empty rows and non-string values
-data = {
-    'text': [
-        'twenty four, 2024, 24, 2024', 
-        '2025, twenty five, 25, 25-26',
-        '2024-2025, twenty twenty-five',
-        '',
-        None,
-        'twenty twenty-four',
-        '2024'
-    ]
-}
-
-df = pd.DataFrame(data)
-
-def extract_years(text):
-    if not isinstance(text, str):
-        text = str(text)  # Convert non-string to string
-    
-    if text.strip() == '':
-        return []
-
-    # Replace written numbers with digits
-    words = text.split()
-    normalized_text = text
-    for word in words:
-        try:
-            normalized_text = normalized_text.replace(word, str(w2n.word_to_num(word)))
-        except:
-            pass
-
-    # Use regex to find all year-like patterns
-    year_patterns = re.findall(r'\b(20\d{2}|2\d|1\d)\b', normalized_text)
-    year_set = set()
-
-    for pattern in year_patterns:
-        if len(pattern) == 4:
-            year_set.add(str(int(pattern)))  # Convert to string and add to set
-        elif len(pattern) == 2:
-            # Assuming current century for two digit years
-            year_set.add(str(2000 + int(pattern)))  # Convert to string and add to set
-
-    return list(year_set)  # Returning unique occurrences
+import cv2
+# from matplotlib import pyplot as plt
 
 
-
-# Apply the function and count unique years
-df['unique_years'] = df['text'].apply(extract_years)
-df['unique_year_counts'] = df['unique_years'].apply(lambda x: {year: x.count(year) for year in x} if x else {})
-
-# Aggregate counts for each year
-aggregate_counts = defaultdict(int)
-for count_dict in df['unique_year_counts']:
-    for year, count in count_dict.items():
-        aggregate_counts[year] += count
-
-# Convert the aggregate counts to a DataFrame
-year_df = pd.DataFrame(list(aggregate_counts.items()), columns=['Year', 'Frequency'])
-
-# Display the year_df DataFrame
-import ace_tools as tools; tools.display_dataframe_to_user(name="Year Frequency", dataframe=year_df)
-
-# Plot the bar graph
-import matplotlib.pyplot as plt
-
-plt.figure(figsize=(10, 6))
-plt.bar(year_df['Year'], year_df['Frequency'])
-plt.xlabel('Year')
-plt.ylabel('Frequency')
-plt.title('Year Counts')
-plt.xticks(rotation=45)
-plt.show()
+def extract_text_from_pdf_with_easyocr(pdf_path, language="en"):
+    """
+    Extracts text and bounding box data from a PDF using EasyOCR.
+    """
+    reader = easyocr.Reader([language], gpu=False)
+    results = reader.readtext(pdf_path, detail=1)  # Extract with bounding boxes
+    return results
 
 
+def parse_table_from_ocr_results(ocr_results):
+    """
+    Attempts to structure OCR results into a table-like format.
+    """
+    # Filter OCR results and sort by bounding box y-coordinates (top to bottom)
+    sorted_results = sorted(ocr_results, key=lambda x: x[0][0][1])
+
+    rows = []
+    for result in sorted_results:
+        text = result[1].strip()
+        rows.append(text.split())  # Split each detected text into words
+
+    # Attempt to create a DataFrame from detected rows
+    df = pd.DataFrame(rows)
+    return df
 
 
-import pandas as pd
+def explain_table(df):
+    """
+    Converts a DataFrame into a descriptive paragraph explaining the table.
+    """
+    explanation = "The table contains the following data:\n\n"
+    explanation += f"The table has {len(df)} rows and {len(df.columns)} columns. "
 
-# Sample DataFrame
-data = {
-    'Interested in P': ['Yes', 'No', 'I am interested in P, yes', 'no, not interested', 'Absolutely yes!'],
-    'Interested in M': ['No', 'Yes', 'Maybe, yes', 'No thanks', 'Sure, yes']
-}
+    for col in df.columns:
+        column_values = df[col].tolist()
+        explanation += f"Column {col + 1} contains values such as {', '.join(map(str, column_values[:3]))}, etc. "
 
-df = pd.DataFrame(data)
+    explanation += "The data is extracted from the provided PDF file."
+    return explanation
 
-# Function to check for 'yes' or 'no'
-def check_interest(text):
-    if isinstance(text, str):
-        text_lower = text.lower()
-        if 'yes' in text_lower:
-            return 'yes'
-        elif 'no' in text_lower:
-            return 'no'
-    return 'undecided'
 
-# Apply the function to each relevant column
-df['P_Interest'] = df['Interested in P'].apply(check_interest)
-df['M_Interest'] = df['Interested in M'].apply(check_interest)
+# def visualize_pdf_text(pdf_path, ocr_results):
+#     """
+#     Visualize OCR results on the PDF for debugging purposes.
+#     """
+#     image = cv2.imread(pdf_path)
+#     for result in ocr_results:
+#         bbox, text, _ = result
+#         (top_left, top_right, bottom_right, bottom_left) = bbox
+#         top_left = tuple(map(int, top_left))
+#         bottom_right = tuple(map(int, bottom_right))
+#         cv2.rectangle(image, top_left, bottom_right, (0, 255, 0), 2)
+#         cv2.putText(image, text, top_left, cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
+#
+#     plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+#     plt.show()
 
-# Count the occurrences of 'yes' and 'no'
-p_interest_counts = df['P_Interest'].value_counts()
-m_interest_counts = df['M_Interest'].value_counts()
 
-# Display the counts
-print("P Interest Counts:")
-print(p_interest_counts)
+if __name__ == "__main__":
+    # Path to your PDF or image file
+    pdf_path = "pib1.pdf"
 
-print("\nM Interest Counts:")
-print(m_interest_counts)
+    # Extract text and bounding boxes using OCR
+    print("Extracting text using OCR...")
+    ocr_results = extract_text_from_pdf_with_easyocr(pdf_path)
 
-# Combine counts into a single DataFrame for better visualization
-interest_counts_df = pd.DataFrame({
-    'Interested in P': p_interest_counts,
-    'Interested in M': m_interest_counts
-}).fillna(0).astype(int)  # Fill NaN with 0 and convert to int
+    # Visualize the OCR results (optional, for debugging)
+    # visualize_pdf_text(pdf_path, ocr_results)
 
-# Display the combined counts DataFrame
-print("\nCombined Interest Counts DataFrame:")
-print(interest_counts_df)
+    # Parse OCR results into a structured table
+    print("Parsing table from OCR results...")
+    table_df = parse_table_from_ocr_results(ocr_results)
+
+    # Display the extracted table
+    print("\nExtracted Table:")
+    print(table_df)
+
+    # Generate a paragraph explaining the table
+    print("\nGenerating explanation...")
+    table_explanation = explain_table(table_df)
+    print("\nTable Explanation:")
+    print(table_explanation)
