@@ -1,65 +1,52 @@
-import gradio as gr
-import requests
+import camelot
+import os
 
-# API Endpoints
-API_BASE_URL = "http://127.0.0.1:8000"  # Replace with your FastAPI base URL
-
-# Function to handle the PDF upload (Stage 1)
-def upload_pdf(pdf):
-    pdf_file = pdf.name
-    with open(pdf_file, "rb") as f:
-        pdf_bytes = f.read()
-
-    # Send the PDF to the backend API for processing
-    response = requests.post(f"{API_BASE_URL}/process_pdf", files={"pdf": pdf_bytes})
+def detect_tables_in_pdf(pdf_path, output_folder=None):
+    """
+    Detects tables in a PDF file using Camelot and optionally saves them as CSVs.
     
-    if response.status_code == 200:
-        return "PDF successfully processed!"
-    else:
-        return f"Failed to process PDF: {response.text}"
-
-# Function to handle the QA query (Stage 2)
-def ask_question(query):
-    # Send the query to the backend API
-    response = requests.post(f"{API_BASE_URL}/ask_question", json={"query": query})
+    Args:
+        pdf_path (str): Path to the PDF file.
+        output_folder (str, optional): Folder to save extracted tables as CSVs. If None, tables are not saved.
     
-    if response.status_code == 200:
-        return response.json()["answer"]
-    else:
-        return f"Failed to get an answer: {response.text}"
-
-# Function to retrieve the highlighted PDF (Stage 3)
-def get_highlighted_pdf(query):
-    # Send the query to the backend API to get the highlighted PDF
-    response = requests.post(f"{API_BASE_URL}/get_highlighted_pdf", json={"query": query})
+    Returns:
+        tables (list): List of Camelot Table objects.
+    """
+    # Ensure the PDF file exists
+    if not os.path.exists(pdf_path):
+        raise FileNotFoundError(f"The file '{pdf_path}' does not exist.")
     
-    if response.status_code == 200:
-        return response.json().get("pdf_url", "Could not generate highlighted PDF")
-    else:
-        return f"Failed to get highlighted PDF: {response.text}"
+    print("Detecting tables in the PDF...")
+    tables = camelot.read_pdf(pdf_path, pages="all")
 
-# Gradio interface for the three stages
-with gr.Blocks() as demo:
-    gr.Markdown("## Stage 1: Upload PDF")
-    pdf_input = gr.File(label="Upload your PDF")
-    upload_button = gr.Button("Upload and Process PDF")
-    upload_output = gr.Textbox(label="Output")
+    # Display table detection results
+    print(f"Detected {len(tables)} tables.")
+    for i, table in enumerate(tables):
+        print(f"Table {i + 1} summary:")
+        print(table.parsing_report)  # Show accuracy, whitespace, etc.
+    
+    # Optionally save tables to CSV
+    if output_folder:
+        os.makedirs(output_folder, exist_ok=True)
+        for i, table in enumerate(tables):
+            csv_path = os.path.join(output_folder, f"table_{i + 1}.csv")
+            table.to_csv(csv_path)
+            print(f"Table {i + 1} saved to {csv_path}")
+    
+    return tables
 
-    upload_button.click(upload_pdf, inputs=pdf_input, outputs=upload_output)
+# Example usage
+if __name__ == "__main__":
+    # Path to the PDF file
+    pdf_path = "example.pdf"  # Replace with the path to your PDF file
+    
+    # Output folder to save detected tables as CSV files (optional)
+    output_folder = "extracted_tables"
 
-    gr.Markdown("## Stage 2: Ask a Question")
-    query_input = gr.Textbox(label="Enter your query")
-    ask_button = gr.Button("Ask Question")
-    answer_output = gr.Textbox(label="Answer")
+    # Detect and extract tables
+    tables = detect_tables_in_pdf(pdf_path, output_folder)
 
-    ask_button.click(ask_question, inputs=query_input, outputs=answer_output)
-
-    gr.Markdown("## Stage 3: Get Highlighted PDF")
-    query_input_2 = gr.Textbox(label="Enter your query (for PDF highlighting)")
-    highlight_button = gr.Button("Get Highlighted PDF")
-    highlight_output = gr.Textbox(label="Highlighted PDF URL")
-
-    highlight_button.click(get_highlighted_pdf, inputs=query_input_2, outputs=highlight_output)
-
-# Launch Gradio app
-demo.launch()
+    # Display the first few rows of each detected table
+    for i, table in enumerate(tables):
+        print(f"\nTable {i + 1}:")
+        print(table.df.head())  # Display the first few rows of the table
