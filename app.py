@@ -1,14 +1,12 @@
 import easyocr
 import pandas as pd
-import cv2
-from matplotlib import pyplot as plt
 
 def extract_text_from_pdf_with_easyocr(pdf_path, language="en"):
     """
     Extracts text and bounding box data from a PDF or image using EasyOCR.
     """
     reader = easyocr.Reader([language], gpu=False)
-    results = reader.readtext(pdf_path, detail=1)  # Extract with bounding boxes
+    results = reader.readtext(pdf_path, detail=1)  # Extract text with bounding boxes
     return results
 
 def parse_table_from_ocr_results(ocr_results):
@@ -41,40 +39,18 @@ def explain_table(df):
     explanation += "The data is extracted from the provided PDF or image file."
     return explanation
 
-def visualize_ocr_results(pdf_path, ocr_results):
-    """
-    Visualizes OCR results on the provided PDF or image for debugging.
-    """
-    image = cv2.imread(pdf_path)
-    for result in ocr_results:
-        bbox, text, _ = result
-        (top_left, top_right, bottom_right, bottom_left) = bbox
-        top_left = tuple(map(int, top_left))
-        bottom_right = tuple(map(int, bottom_right))
-        cv2.rectangle(image, top_left, bottom_right, (0, 255, 0), 2)
-        cv2.putText(image, text, top_left, cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-    
-    plt.figure(figsize=(12, 8))
-    plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-    plt.axis('off')
-    plt.title("OCR Results Visualization")
-    plt.show()
-
 # Running everything in a Jupyter Notebook cell
 def run_ocr_pipeline(pdf_path):
     print("Step 1: Extracting text using OCR...")
     ocr_results = extract_text_from_pdf_with_easyocr(pdf_path)
 
-    print("Step 2: Visualizing OCR results...")
-    visualize_ocr_results(pdf_path, ocr_results)
-
-    print("Step 3: Parsing table from OCR results...")
+    print("Step 2: Parsing table from OCR results...")
     table_df = parse_table_from_ocr_results(ocr_results)
     
     print("\nExtracted Table:")
     display(table_df)  # Display the table inline in the notebook
 
-    print("\nStep 4: Generating table explanation...")
+    print("\nStep 3: Generating table explanation...")
     table_explanation = explain_table(table_df)
     print("\nTable Explanation:")
     print(table_explanation)
