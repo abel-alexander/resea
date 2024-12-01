@@ -12,11 +12,16 @@ df = pd.DataFrame(data)
 df['Timestamp'] = pd.to_datetime(df['Timestamp'], format='%d/%m/%y', errors='coerce')
 df = df.dropna(subset=['Timestamp'])
 
-# Normalize 'Timestamp' to midnight to create a 'Date' column
+# Normalize 'Timestamp' to midnight to create a 'Date' column (datetime64[ns])
 df['Date'] = df['Timestamp'].dt.normalize()
 
 # Step 2: Get today's date as datetime64[ns]
 today = pd.Timestamp(datetime.now().date())
+
+# Debug: Check `today` type and sample data
+print(f"Today's Date: {today} (type: {type(today)})")
+print("\nSample DataFrame after processing:")
+print(df.head())
 
 # Step 3: Stats till Date (Aggregated)
 stats_till_date = df.groupby('Action').agg(
@@ -25,15 +30,24 @@ stats_till_date = df.groupby('Action').agg(
 ).reset_index()
 
 # Step 4: Stats for Today
-df_today = df[df['Date'] == today]
+df_today = df[df['Date'] == today]  # Filter for today's date
 stats_today = df_today.groupby('Action').agg(
     Requests=('Action', 'count'),
     Unique_Users=('User', lambda x: len(x.dropna().unique()))
 ).reset_index()
 
-# Output the two DataFrames
+# Step 5: Grouped by Dates (Daily Stats)
+daily_stats = df.groupby('Date').agg(
+    Total_Requests=('Action', 'count'),
+    Unique_Users=('User', lambda x: len(x.dropna().unique()))
+).reset_index()
+
+# Output the three DataFrames
 print("\nStats till Date:")
 print(stats_till_date)
 
 print("\nStats for Today:")
 print(stats_today)
+
+print("\nDaily Stats (Grouped by Date):")
+print(daily_stats)
