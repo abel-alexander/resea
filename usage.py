@@ -1,7 +1,7 @@
 import re
 import pandas as pd
 
-# File paths (update these paths as needed)
+# File paths
 input_file_path = "input_logs.txt"  # Path to the .txt log file
 output_file_path = "parsed_logs.csv"  # Path for the output .csv file
 
@@ -11,9 +11,9 @@ def parse_log_line(log_line):
     timestamp = re.search(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", log_line)
     timestamp = timestamp.group(0) if timestamp else None
 
-    # Extract user (assumes it's the text after timestamp and before the next comma)
-    user_match = re.search(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}, (.+?),", log_line)
-    user = user_match.group(1).strip() if user_match else None
+    # Extract user (email or name)
+    user_match = re.search(r",\s*([\w\.-]+@[\w\.-]+|\w+\s+\w+),", log_line)  # Matches email or "First Last"
+    user = user_match.group(1).strip() if user_match else "Unknown"
 
     # Extract action type (e.g., 'qa' or 'sum')
     action_match = re.search(r"(qa|sum):", log_line, re.IGNORECASE)
@@ -23,7 +23,7 @@ def parse_log_line(log_line):
 
 # Read the .txt file line by line
 parsed_logs = []
-with open(input_file_path, "r") as file:
+with open(input_file_path, "r", encoding="utf-8") as file:  # Specify encoding here
     for line in file:
         parsed_data = parse_log_line(line.strip())  # Parse each line
         if parsed_data[0]:  # Only include lines with a valid timestamp
