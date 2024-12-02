@@ -1,47 +1,34 @@
-import io
 import fitz  # PyMuPDF
-from PIL import Image
 
-# File path you want to extract images from
-file = "1770.521236.pdf"
+# File path to the PDF
+file_path = "example.pdf"
+
+# Specify the page range (1-based index)
+start_page = 2  # Start from page 2
+end_page = 5    # End at page 5 (inclusive)
 
 try:
-    # Open the file
-    pdf_file = fitz.open(file)
+    # Open the PDF
+    pdf_document = fitz.open(file_path)
 
-    # Iterate over PDF pages
-    for page_index in range(len(pdf_file)):
-        # Get the page itself
-        page = pdf_file[page_index]
-        image_list = page.getImageList()
+    # Ensure the range is valid
+    if start_page < 1 or end_page > len(pdf_document) or start_page > end_page:
+        raise ValueError("Invalid page range specified.")
 
-        # Printing the number of images found on this page
-        if image_list:
-            print(f"[+] Found a total of {len(image_list)} images in page {page_index + 1}")
-        else:
-            print(f"[!] No images found on page {page_index + 1}")
+    # Loop through the specified range
+    for page_number in range(start_page - 1, end_page):  # Convert to 0-based index
+        # Get the page
+        page = pdf_document[page_number]
 
-        for image_index, img in enumerate(image_list, start=1):
-            # Get the XREF of the image
-            xref = img[0]
+        # Extract text from the page
+        text = page.get_text()
 
-            # Extract the image bytes
-            base_image = pdf_file.extract_image(xref)
-            image_bytes = base_image["image"]
+        # Print or process the extracted text
+        print(f"\n--- Text from page {page_number + 1} ---\n")
+        print(text)
 
-            # Get the image extension
-            image_ext = base_image["ext"]
-
-            # Load it to PIL
-            image = Image.open(io.BytesIO(image_bytes))
-
-            # Save it to the local disk
-            output_filename = f"image_page{page_index + 1}_img{image_index}.{image_ext}"
-            image.save(output_filename)
-            print(f"    [-] Saved image: {output_filename}")
-
-    pdf_file.close()
-    print("[+] Image extraction complete.")
+    # Close the document
+    pdf_document.close()
 
 except Exception as e:
     print(f"[!] Error: {e}")
