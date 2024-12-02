@@ -17,3 +17,39 @@ for doc in pages:
 
 # Print the dictionary
 print(sections)
+
+
+
+import fitz  # PyMuPDF
+from PIL import Image
+import io
+
+# Define the PDF file and the page range
+pdf_path = "palantir.pdf"
+start_page = 250  # Starting page
+end_page = 300    # Ending page
+
+# Output directory for the images
+output_dir = "./extracted_images/"
+
+# Open the PDF file
+doc = fitz.open(pdf_path)
+
+# Loop through the specified page range
+for page_num in range(start_page - 1, end_page):  # PyMuPDF uses 0-based indexing
+    page = doc.load_page(page_num)
+    images = page.get_images(full=True)  # Get all images on the page
+
+    for i, img in enumerate(images):
+        xref = img[0]  # Reference to the image object
+        base_image = doc.extract_image(xref)  # Extract the image
+        image_bytes = base_image["image"]  # Get the image data as bytes
+        image_ext = base_image["ext"]  # Get the image format (e.g., png, jpeg)
+
+        # Create an image from the bytes
+        image = Image.open(io.BytesIO(image_bytes))
+        
+        # Save the image
+        image.save(f"{output_dir}page_{page_num + 1}_image_{i + 1}.{image_ext}")
+
+print("Image extraction completed.")
