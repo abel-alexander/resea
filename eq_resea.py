@@ -1,4 +1,7 @@
-from fuzzywuzzy import fuzz
+import spacy
+
+# Load SpaCy's medium-sized pre-trained model
+nlp = spacy.load("en_core_web_md")
 
 # Define the range of pages for "Equity Research"
 equity_research_start = 250
@@ -11,8 +14,8 @@ disclaimer_patterns = {
     "Morgan Stanley": "Morgan Stanley does and seeks to do business with companies",
 }
 
-# Threshold for fuzzy matching
-fuzzy_threshold = 80
+# Threshold for semantic similarity (0.85 means 85% similar)
+similarity_threshold = 0.85
 
 # Initialize a dictionary to store results
 bank_disclaimer_pages = {}
@@ -24,12 +27,19 @@ for doc in pages:
         # Preprocess the page content to handle multi-line text
         page_content = doc.page_content.replace("\n", " ").strip()
 
+        # Convert the page content to a SpaCy document
+        page_doc = nlp(page_content)
+
         # Check for each bank's disclaimer pattern in the preprocessed content
         for bank, pattern in disclaimer_patterns.items():
-            # Use fuzzy matching to compare the pattern and page content
-            similarity = fuzz.partial_ratio(pattern, page_content)
+            # Convert the pattern to a SpaCy document
+            pattern_doc = nlp(pattern)
 
-            if similarity > fuzzy_threshold:
+            # Calculate semantic similarity
+            similarity = page_doc.similarity(pattern_doc)
+
+            # If the similarity exceeds the threshold, record the bank and page number
+            if similarity > similarity_threshold:
                 # Store the bank name and page number (only the first occurrence)
                 if bank not in bank_disclaimer_pages:
                     bank_disclaimer_pages[bank] = doc.metadata["page"]
