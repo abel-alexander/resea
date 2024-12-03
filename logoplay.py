@@ -163,3 +163,42 @@ def main():
 # Run the main function
 if __name__ == "__main__":
     main()
+
+
+
+
+def detect_logos_with_multiple_templates(logo_templates, test_image):
+    """
+    Detect logos in a test image using multiple logo templates.
+    :param logo_templates: List of paths to logo template images.
+    :param test_image: Input image (PIL Image or numpy array).
+    :return: List of detected logo names.
+    """
+    detected_logos = []
+
+    # Convert the test image to a numpy array
+    test_img = np.array(test_image)
+    if len(test_img.shape) == 3:  # RGB image
+        test_img = cv2.cvtColor(test_img, cv2.COLOR_RGB2GRAY)
+    elif len(test_img.shape) != 2:  # Not grayscale or RGB
+        raise ValueError("Invalid test image format. Expected grayscale or RGB.")
+
+    for logo_name, template_path in logo_templates.items():
+        # Load and preprocess template
+        template = cv2.imread(template_path, cv2.IMREAD_GRAYSCALE)
+        if template is None:
+            raise ValueError(f"Template image at {template_path} could not be loaded. Check the file path.")
+
+        # Extract SIFT features
+        kp1, desc1 = extract_sift_features(template)
+        kp2, desc2 = extract_sift_features(test_img)
+
+        # Match features
+        good_matches = match_features(desc1, desc2)
+
+        # Check for sufficient matches
+        match_threshold = 10  # Adjust threshold based on your requirements
+        if len(good_matches) > match_threshold:
+            detected_logos.append(logo_name)
+
+    return detected_logos
