@@ -1,10 +1,8 @@
 import cv2
 import pytesseract
 from pytesseract import Output
-from fuzzywuzzy import process
 import os
 from tqdm import tqdm
-
 
 def extract_text_from_top(image, top_percentage=30):
     """Extract text from the top portion of an image."""
@@ -13,29 +11,27 @@ def extract_text_from_top(image, top_percentage=30):
     text = pytesseract.image_to_string(top_crop, lang='eng')  # OCR
     return text
 
-
 def find_company_starting_pages(image_paths, companies):
     """Find the page number where each company's section starts."""
     results = {}
-
+    
     for page_num, image_path in enumerate(tqdm(image_paths, desc="Processing images")):
         image = cv2.imread(image_path)
         if image is None:
             print(f"Warning: Could not read image: {image_path}")
             continue
-
+        
         # Extract text from the top region of the page
-        detected_text = extract_text_from_top(image)
-
-        # Match detected text to company names
-        matched_company = process.extractOne(detected_text, companies, score_cutoff=70)
-        if matched_company:
-            company_name = matched_company[0]
-            if company_name not in results:  # Record the first occurrence
-                results[company_name] = page_num + 1  # Page numbers are 1-based
-
+        detected_text = extract_text_from_top(image).lower()  # Convert to lowercase for case-insensitive matching
+        
+        # Check for exact substring match of company names
+        for company in companies:
+            if company.lower() in detected_text:  # Case-insensitive check
+                if company not in results:  # Record the first occurrence
+                    results[company] = page_num + 1  # Page numbers are 1-based
+                break  # Stop checking once a match is found for this page
+    
     return results
-
 
 # Example usage
 image_folder = "output_images"  # Folder containing converted images
