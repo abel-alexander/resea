@@ -2,17 +2,42 @@ import cv2
 import pytesseract
 import logging
 import re
+import fitz  # PyMuPDF
+import numpy as np
 from typing import List, Tuple, Any
 
 class TableTextExtractor:
     def __init__(self, pdf_path: str):
         self.pdf_path = pdf_path
-        pytesseract.pytesseract.tesseract_cmd = r"<path_to_tesseract>"  # Update the path to Tesseract executable
+        pytesseract.pytesseract.tesseract_cmd = r"<path_to_tesseract>"  # Update with the path to Tesseract executable
+
+    def _pdf_to_images(self) -> List[Any]:
+        """
+        Converts PDF pages to grayscale images using PyMuPDF.
+        """
+        try:
+            logging.info("Converting PDF to images.")
+            pdf_document = fitz.open(self.pdf_path)
+            images = []
+
+            for page_number in range(len(pdf_document)):
+                page = pdf_document[page_number]
+                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # Increase resolution
+                img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
+                gray_image = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+                images.append(gray_image)
+
+            pdf_document.close()
+            logging.info("PDF converted to images successfully.")
+            return images
+
+        except Exception as e:
+            logging.error("Error converting PDF to images", exc_info=True)
+            raise
 
     def _detect_tables(self, image: Any) -> List[Tuple[int, int, int, int]]:
         """
-        Detects tables in an image using morphological transformations for line detection
-        and contour detection to identify table boundaries.
+        Detects tables in an image using morphological transformations and contour detection.
         """
         try:
             vertical_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, image.shape[0] // 30))
@@ -53,25 +78,13 @@ class TableTextExtractor:
             logging.error("Error extracting text from tables", exc_info=True)
             raise
 
-    def _image_list(self, pdf_path: str) -> List[Any]:
-        """
-        Converts a PDF to a list of images.
-        """
-        try:
-            from pdf2image import convert_from_path
-            images = convert_from_path(pdf_path)
-            return [cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY) for image in images]
-        except Exception as e:
-            logging.error("Error converting PDF to images", exc_info=True)
-            raise
-
     def extract_tables_and_text(self) -> List[str]:
         """
         Extracts tables and their respective text from the document specified by `self.pdf_path`.
         """
         try:
             logging.info("Starting table and text extraction process.")
-            images = self._image_list(self.pdf_path)
+            images = self._pdf_to_images()
 
             all_tables_text = []
             for image in images:
