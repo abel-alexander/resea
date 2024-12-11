@@ -1,20 +1,44 @@
 import os
 import cv2
+import fitz  # PyMuPDF
 import pytesseract
-from pdf2image import convert_from_path
 import numpy as np
 
 
-def pdf_to_images(pdf_path, dpi=300):
+def pdf_to_images(pdf_path, dpi=200):
     """
-    Converts a PDF file into a list of images.
+    Converts a PDF file into a list of images using PyMuPDF.
+
+    Parameters:
+    - pdf_path: Path to the PDF file.
+    - dpi: Resolution of the output images.
+
+    Returns:
+    - List of images (numpy arrays) representing each page of the PDF.
     """
-    return [np.array(page.convert('RGB')) for page in convert_from_path(pdf_path, dpi=dpi)]
+    pdf_document = fitz.open(pdf_path)
+    images = []
+
+    for page_number in range(len(pdf_document)):
+        page = pdf_document[page_number]
+        pix = page.get_pixmap(matrix=fitz.Matrix(dpi / 72, dpi / 72))  # Resolution scaling
+        img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
+        gray_image = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        images.append(gray_image)
+
+    pdf_document.close()
+    return images
 
 
 def extract_text_with_coordinates(image):
     """
     Extracts text along with bounding box coordinates from an image using Tesseract OCR.
+
+    Parameters:
+    - image: Grayscale image (numpy array).
+
+    Returns:
+    - Dictionary containing OCR text and bounding box data.
     """
     data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
     return data
@@ -90,11 +114,8 @@ def extract_tables_from_pdf(pdf_path, output_dir):
     images = pdf_to_images(pdf_path)
 
     for page_number, image in enumerate(images):
-        # Convert image to grayscale
-        gray_image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-
         # Extract text with bounding boxes
-        ocr_data = extract_text_with_coordinates(gray_image)
+        ocr_data = extract_text_with_coordinates(image)
 
         # Identify numeric columns
         table_regions = identify_numeric_columns(ocr_data)
