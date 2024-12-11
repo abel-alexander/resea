@@ -5,26 +5,31 @@ import pytesseract
 import numpy as np
 
 
-def pdf_to_images(pdf_path, dpi=200):
+def pdf_to_images(pdf_path, dpi=200, pages=None):
     """
-    Converts a PDF file into a list of images using PyMuPDF.
+    Converts specified pages of a PDF into grayscale images using PyMuPDF.
 
     Parameters:
     - pdf_path: Path to the PDF file.
     - dpi: Resolution of the output images.
+    - pages: List of page numbers (0-indexed) to convert. If None, all pages are converted.
 
     Returns:
-    - List of images (numpy arrays) representing each page of the PDF.
+    - List of images (numpy arrays) representing each selected page of the PDF.
     """
     pdf_document = fitz.open(pdf_path)
     images = []
 
-    for page_number in range(len(pdf_document)):
+    # Determine pages to process
+    if pages is None:
+        pages = range(len(pdf_document))
+
+    for page_number in pages:
         page = pdf_document[page_number]
         pix = page.get_pixmap(matrix=fitz.Matrix(dpi / 72, dpi / 72))  # Resolution scaling
         img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
         gray_image = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-        images.append(gray_image)
+        images.append((page_number, gray_image))
 
     pdf_document.close()
     return images
@@ -99,21 +104,25 @@ def draw_bounding_boxes(image, regions, output_path):
     cv2.imwrite(output_path, image)
 
 
-def extract_tables_from_pdf(pdf_path, output_dir):
+def extract_tables_from_pdf(pdf_path, output_dir, pages=None):
     """
     Detects tables in a PDF by focusing on numeric regions and saves them as individual images.
 
     Parameters:
     - pdf_path: Path to the PDF file.
     - output_dir: Directory to save the detected table images.
+    - pages: List of page numbers (1-indexed) to process. If None, all pages are processed.
     """
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    # Convert PDF to images
-    images = pdf_to_images(pdf_path)
+    # Convert 1-indexed pages to 0-indexed for PyMuPDF
+    pages = [p - 1 for p in pages] if pages else None
 
-    for page_number, image in enumerate(images):
+    # Convert selected PDF pages to images
+    images = pdf_to_images(pdf_path, pages=pages)
+
+    for page_number, image in images:
         # Extract text with bounding boxes
         ocr_data = extract_text_with_coordinates(image)
 
@@ -131,4 +140,8 @@ if __name__ == "__main__":
     pdf_path = "path_to_your_pdf.pdf"  # Replace with your PDF file path
     output_dir = "detected_tables_output"  # Replace with your desired output directory
 
-    extract_tables_from_pdf(pdf_path, output_dir)
+    # Input page numbers to focus on (1-indexed)
+    pages_to_process = [1, 2, 5]  # Example: process pages 1, 2, and 5
+
+    # Run the table extraction
+    extract_tables_from_pdf(pdf_path, output_dir, pages=pages_to_process)
