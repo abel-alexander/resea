@@ -1,39 +1,21 @@
-import re
-import pandas as pd
+def process_pdf_and_extract_tables(pdf_path: str):
+    """
+    Full workflow to extract tables from a PDF, detect table structures using Mistral,
+    and convert them into DataFrames.
+    
+    Parameters:
+    - pdf_path: Path to the PDF file.
+    
+    Returns:
+    - List of pandas DataFrames, each representing a detected table.
+    """
+    # Step 1: Extract raw text from PDF (including paragraphs and tables)
+    raw_text = extracted_data(pdf_path)  # Extracts all text from the PDF
 
-# File paths
-input_file_path = "input_logs.txt"  # Path to the .txt log file
-output_file_path = "parsed_logs.csv"  # Path for the output .csv file
+    # Step 2: Use Mistral to detect and extract table data
+    tables = detect_and_extract_tables_with_mistral(raw_text)
 
-# Function to parse a single log line
-def parse_log_line(log_line):
-    # Extract timestamp
-    timestamp = re.search(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", log_line)
-    timestamp = timestamp.group(0) if timestamp else None
+    # Step 3: Convert extracted table data into DataFrames
+    dataframes = tables_to_dataframes(tables)
 
-    # Extract user (email or name)
-    user_match = re.search(r",\s*([\w\.-]+@[\w\.-]+|\w+\s+\w+),", log_line)  # Matches email or "First Last"
-    user = user_match.group(1).strip() if user_match else "Unknown"
-
-    # Extract action type (e.g., 'qa' or 'sum')
-    action_match = re.search(r"(qa|sum):", log_line, re.IGNORECASE)
-    action = action_match.group(1).lower() if action_match else None
-
-    return [timestamp, user, action]
-
-# Read the .txt file line by line
-parsed_logs = []
-with open(input_file_path, "r", encoding="utf-8") as file:  # Specify encoding here
-    for line in file:
-        parsed_data = parse_log_line(line.strip())  # Parse each line
-        if parsed_data[0]:  # Only include lines with a valid timestamp
-            parsed_logs.append(parsed_data)
-
-# Create a DataFrame from the parsed logs
-columns = ["Timestamp", "User", "Action"]
-df = pd.DataFrame(parsed_logs, columns=columns)
-
-# Save the DataFrame to a .csv file
-df.to_csv(output_file_path, index=False)
-
-print(f"Parsed logs saved to {output_file_path}")
+    return dataframes
