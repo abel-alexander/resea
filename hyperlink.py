@@ -1,67 +1,48 @@
 import fitz  # PyMuPDF
 
 # Load the PDF
-pdf_path = "Apparel_2PIB.pdf"
+pdf_path = "Public_Information_Book.pdf"
 doc = fitz.open(pdf_path)
 
-# Extract the Table of Contents (ToC) as a list of [level, title, page]
-toc = doc.get_toc()  # Returns a list of [level, title, page]
-
-# Build a dictionary for the first matching page number regardless of level
-toc_dict = {}
-for entry in toc:
-    page_number = entry[2]
-    if page_number > 0 and page_number not in toc_dict:  # Only keep the first entry for each page
-        toc_dict[page_number] = entry[1]  # {page_number: title}
-
-# Extract links from the ToC page
+# Analyze the first page (assuming it contains the ToC)
 toc_page_number = 0  # Adjust if ToC spans multiple pages
 toc_page = doc[toc_page_number]
-links = toc_page.get_links()
 
-# List to store matched results
-matched_results = []
-last_broker_title = None  # Keep track of the last detected "Broker" or similar title
+# Extract lines of text
+lines = toc_page.get_text("text").split("\n")  # Get text line by line
 
-# Iterate over links and match with ToC
-for link in links:
-    try:
-        if "page" in link and link["page"] is not None:
-            destination_page = int(link["page"]) + 1  # Convert to 1-indexed
-            # Check if the page exists in the ToC dictionary
-            if destination_page in toc_dict:
-                title = toc_dict[destination_page]
-                matched_results.append((destination_page, title))
-                # Update the last broker title
-                last_broker_title = title
-            else:
-                # No ToC match, extract text from the page and check for keywords
-                page = doc[destination_page - 1]  # Convert back to 0-indexed
-                page_text = page.get_text("text")
-                # Extract the first 100 characters for a quick summary
-                snippet = page_text[:100].lower()
+# Extract hyperlinks
+links = toc_page.get_links()  # Get all links on the ToC page
 
-                # Check for keywords
-                if any(keyword in snippet for keyword in ["earnings call", "call", "call transcript"]):
-                    if last_broker_title:  # Use the last detected broker title
-                        dynamic_title = f"{last_broker_title} - Earnings Transcript"
-                        matched_results.append((destination_page, dynamic_title))
-                    else:
-                        print(f"No preceding broker title found for page {destination_page}.")
-                else:
-                    print(f"No ToC match for hyperlink pointing to page {destination_page}.")
-    except Exception as e:
-        print(f"Error processing link: {link}. Error: {e}")
+# Parse the hierarchical structure
+toc_hierarchy = []  # List to store the parsed ToC structure
+current_company = None  # To track the current company
 
-# Print the matched results
-print("Matched Results:")
-for page, title in matched_results:
-    print(f"Page {page}: {title}")
+for line in lines:
+    line = line.strip()
+    if line.isdigit():  # Ignore pure numeric lines (e.g., list numbers)
+        continue
+    if line.endswith(":"):  # Check for company names
+        current_company = line[:-1]  # Remove the trailing colon
+    elif current_company:  # Add subcategories under the current company
+        toc_hierarchy.append((current_company, line))
 
-# Optionally, write the results to a file
-with open("matched_results.txt", "w") as output_file:
-    for page, title in matched_results:
-        output_file.write(f"Page {page}: {title}\n")
+# Match hyperlinks to ToC structure
+new_toc = []
+for link, (company, subcategory) in zip(links, toc_hierarchy):
+    if "page" in link and link["page"] is not None:
+        destination_page = link["page"] + 1  # Convert to 1-indexed
+        new_toc.append((company, subcategory, destination_page))
+
+# Print the new ToC
+print("Generated Table of Contents:")
+for company, subcategory, page in new_toc:
+    print(f"{company} - {subcategory}, Page {page}")
+
+# Optionally save the new ToC to a file
+with open("generated_toc.txt", "w") as output_file:
+    for company, subcategory, page in new_toc:
+        output_file.write(f"{company} - {subcategory}, Page {page}\n")
 
 # Close the document
 doc.close()
