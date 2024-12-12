@@ -7,28 +7,32 @@ doc = fitz.open(pdf_path)
 # Extract the Table of Contents (ToC) as a list of [level, title, page]
 toc = doc.get_toc()  # Returns a list of [level, title, page]
 
+# Build a dictionary for the first matching page number regardless of level
+toc_dict = {}
+for entry in toc:
+    page_number = entry[2]
+    if page_number > 0 and page_number not in toc_dict:  # Only keep the first entry for each page
+        toc_dict[page_number] = entry[1]  # {page_number: title}
+
 # Extract links from the ToC page
 toc_page_number = 0  # Adjust if ToC spans multiple pages
 toc_page = doc[toc_page_number]
 links = toc_page.get_links()
 
-# Create a dictionary from the ToC for fast lookup {page_number: title}
-toc_dict = {entry[2]: entry[1] for entry in toc}  # {page_number: title}
-
 # List to store matched results
 matched_results = []
 
-# Iterate over links from the ToC page
+# Iterate over links and match with ToC
 for link in links:
     try:
         if "page" in link and link["page"] is not None:
-            # Get the destination page (convert to 1-indexed)
-            destination_page = int(link["page"]) + 1
-            
-            # Check if this page is in the ToC
+            destination_page = int(link["page"]) + 1  # Convert to 1-indexed
+            # Check if the page exists in the ToC dictionary
             if destination_page in toc_dict:
-                title = toc_dict[destination_page]  # Get the title
+                title = toc_dict[destination_page]
                 matched_results.append((destination_page, title))
+            else:
+                print(f"No ToC match for hyperlink pointing to page {destination_page}.")
     except Exception as e:
         print(f"Error processing link: {link}. Error: {e}")
 
