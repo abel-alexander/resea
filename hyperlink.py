@@ -62,3 +62,56 @@ with open("generated_toc.txt", "w") as output_file:
 
 # Close the document
 doc.close()
+
+
+
+
+
+
+
+
+
+import fitz  # PyMuPDF
+
+# Load the PDF
+pdf_path = "Public_Information_Book.pdf"
+doc = fitz.open(pdf_path)
+
+# Analyze the first page (assuming it contains the ToC)
+toc_page_number = 0  # Adjust if ToC spans multiple pages
+toc_page = doc[toc_page_number]
+
+# Extract hyperlinks and text blocks
+links = toc_page.get_links()  # Get all links on the page
+text_blocks = toc_page.get_text("blocks")  # Extract text with bounding boxes
+
+# Function to find text associated with a hyperlink
+def get_text_on_link(link_rect, text_blocks):
+    """Find the text that overlaps with the hyperlink rectangle."""
+    for block in text_blocks:
+        x0, y0, x1, y1, text, *rest = block  # Unpack the text block
+        # Check if the text block overlaps with the hyperlink rectangle
+        if (
+            link_rect[0] >= x0 and link_rect[2] <= x1 and  # Horizontal overlap
+            link_rect[1] >= y0 and link_rect[3] <= y1      # Vertical overlap
+        ):
+            return text.strip()  # Return the text in the hyperlink rectangle
+    return None
+
+# Iterate over links and find associated text
+link_texts = []
+for link in links:
+    if "from" in link and "page" in link and link["page"] is not None:
+        link_rect = link["from"]  # Get the hyperlink rectangle
+        destination_page = link["page"] + 1  # Convert to 1-indexed
+        associated_text = get_text_on_link(link_rect, text_blocks)
+        if associated_text:
+            link_texts.append((associated_text, destination_page))
+
+# Print the results
+print("Hyperlink Text and Page Number:")
+for text, page in link_texts:
+    print(f"{text}, Page {page}")
+
+# Close the document
+doc.close()
