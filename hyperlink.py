@@ -21,6 +21,7 @@ links = toc_page.get_links()
 
 # List to store matched results
 matched_results = []
+last_broker_title = None  # Keep track of the last detected "Broker" or similar title
 
 # Iterate over links and match with ToC
 for link in links:
@@ -31,8 +32,24 @@ for link in links:
             if destination_page in toc_dict:
                 title = toc_dict[destination_page]
                 matched_results.append((destination_page, title))
+                # Update the last broker title
+                last_broker_title = title
             else:
-                print(f"No ToC match for hyperlink pointing to page {destination_page}.")
+                # No ToC match, extract text from the page and check for keywords
+                page = doc[destination_page - 1]  # Convert back to 0-indexed
+                page_text = page.get_text("text")
+                # Extract the first 100 characters for a quick summary
+                snippet = page_text[:100].lower()
+
+                # Check for keywords
+                if any(keyword in snippet for keyword in ["earnings call", "call", "call transcript"]):
+                    if last_broker_title:  # Use the last detected broker title
+                        dynamic_title = f"{last_broker_title} - Earnings Transcript"
+                        matched_results.append((destination_page, dynamic_title))
+                    else:
+                        print(f"No preceding broker title found for page {destination_page}.")
+                else:
+                    print(f"No ToC match for hyperlink pointing to page {destination_page}.")
     except Exception as e:
         print(f"Error processing link: {link}. Error: {e}")
 
