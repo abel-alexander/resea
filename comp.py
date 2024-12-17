@@ -5,7 +5,7 @@ import re
 
 def extract_text_from_columns(pdf_path, page):
     """
-    Extract text from left and right columns of a PDF page using OCR.
+    Extract text separately from left and right columns of a PDF page using OCR.
     Args:
         pdf_path (str): Path to the PDF file.
         page (int): Page number to process.
@@ -20,7 +20,7 @@ def extract_text_from_columns(pdf_path, page):
     left_half = img.crop((0, 0, img.width // 2, img.height))
     right_half = img.crop((img.width // 2, 0, img.width, img.height))
 
-    # OCR for each half
+    # OCR for left and right halves
     left_text = pytesseract.image_to_string(left_half)
     right_text = pytesseract.image_to_string(right_half)
 
@@ -29,37 +29,40 @@ def extract_text_from_columns(pdf_path, page):
 
 def identify_toc_entries(lines):
     """
-    Identify Level 1 and associate split lines properly.
+    Identify Level 1 entries based on the first 5 characters and handle split lines.
     Args:
         lines (list): List of lines from OCR text.
     Returns:
-        dict: Structured TOC with Level 1 entries and their content.
+        dict: Structured TOC with Level 1 entries.
     """
     toc_structure = {}
     current_level1 = None
-
-    # Level 1 patterns: Strict numbering
-    level1_pattern = r"^\d+\.\s+.+"
-    valid_line_pattern = r"^[A-Za-z0-9].*"
 
     for line in lines:
         line = line.strip()
         if not line:  # Skip empty lines
             continue
 
-        # Match Level 1 (e.g., "1. Amer Sports FY 2023")
-        if re.match(level1_pattern, line):
+        # Check the first 5 characters for valid Level 1 patterns
+        if len(line) >= 5 and re.match(r"^\d+\.\s", line[:5]):
             current_level1 = line
             toc_structure[current_level1] = []
-        # Handle split lines: Append to previous Level 1 if valid
-        elif current_level1 and re.match(valid_line_pattern, line):
-            if toc_structure[current_level1]:  # Prevent IndexError
-                toc_structure[current_level1][-1] += f" {line.strip()}"
-            else:
-                continue  # Skip invalid split lines
+        # Append split lines to the last Level 1 entry
+        elif current_level1 and len(line) > 3:
+            toc_structure[current_level1].append(line)
 
     return toc_structure
 
+def merge_columns(left_lines, right_lines):
+    """
+    Merge TOC entries from two columns.
+    Args:
+        left_lines (list): TOC lines from the left column.
+        right_lines (list): TOC lines from the right column.
+    Returns:
+        list: Combined lines from both columns.
+    """
+    return left_lines + right_lines
 
 def process_toc(pdf_path):
     """
@@ -80,20 +83,6 @@ def process_toc(pdf_path):
     print("Table of Contents not found.")
     return {}
 
-
-def merge_columns(left_lines, right_lines):
-    """
-    Merge TOC entries from two columns.
-    Args:
-        left_lines (list): TOC lines from the left column.
-        right_lines (list): TOC lines from the right column.
-    Returns:
-        list: Combined lines from both columns.
-    """
-    return left_lines + right_lines
-
-
-
 def print_clean_toc(toc_structure):
     """
     Print the TOC structure in a clean format.
@@ -101,10 +90,10 @@ def print_clean_toc(toc_structure):
         toc_structure (dict): Structured TOC.
     """
     print("\nCleaned Table of Contents:")
-    for level1, level2_items in toc_structure.items():
-        print(level1)
-        for item in level2_items:
-            print(f"   - {item}")
+    for idx, (level1, details) in enumerate(toc_structure.items(), 1):
+        print(f"{idx}. {level1}")
+        for detail in details:
+            print(f"   - {detail}")
 
 def get_toc(toc_structure):
     """
@@ -116,9 +105,8 @@ def get_toc(toc_structure):
     """
     return toc_structure
 
-
 # === Usage ===
-pdf_path = "your_pdf_path_here.pdf"  # Replace with the path to your PDF
+pdf_path = "your_pdf_path_here.pdf"  # Replace with your PDF file path
 
 # Step 1: Process TOC dynamically
 toc_structure = process_toc(pdf_path)
