@@ -53,9 +53,13 @@ def identify_toc_entries(lines):
             toc_structure[current_level1] = []
         # Handle split lines: Append to previous Level 1 if valid
         elif current_level1 and re.match(valid_line_pattern, line):
-            toc_structure[current_level1][-1] += f" {line.strip()}" if toc_structure[current_level1] else line
+            if toc_structure[current_level1]:  # Prevent IndexError
+                toc_structure[current_level1][-1] += f" {line.strip()}"
+            else:
+                continue  # Skip invalid split lines
 
     return toc_structure
+
 
 def process_toc(pdf_path):
     """
