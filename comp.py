@@ -5,12 +5,12 @@ import re
 
 def extract_text_from_columns(pdf_path, page):
     """
-    Extract text separately from left and right columns of a PDF page using OCR.
+    Extract text from left and right columns of a PDF page using OCR.
     Args:
         pdf_path (str): Path to the PDF file.
         page (int): Page number to process.
     Returns:
-        tuple: OCR text from the left and right columns.
+        list: OCR text from left and right columns.
     """
     pdf = fitz.open(pdf_path)
     pix = pdf[page].get_pixmap()
@@ -20,82 +20,72 @@ def extract_text_from_columns(pdf_path, page):
     left_half = img.crop((0, 0, img.width // 2, img.height))
     right_half = img.crop((img.width // 2, 0, img.width, img.height))
 
-    # OCR for left and right halves
+    # OCR for each half
     left_text = pytesseract.image_to_string(left_half)
     right_text = pytesseract.image_to_string(right_half)
 
     pdf.close()
-    return left_text, right_text
+    return left_text.split("\n"), right_text.split("\n")
 
-def clean_toc_text(text):
+def identify_toc_entries(lines):
     """
-    Clean OCR text to extract meaningful TOC lines.
+    Identify Level 1 and Level 2 TOC entries using multi-pattern regex.
     Args:
-        text (str): OCR-extracted text.
+        lines (list): List of lines extracted from OCR.
     Returns:
-        list: Cleaned TOC lines.
-    """
-    lines = text.split("\n")
-    clean_lines = []
-
-    for line in lines:
-        line = line.strip()
-        # Match Level 1 and Level 2: "1. Birkenstock" or "1 Earnings Report"
-        if re.match(r"^\d+\.\s+.+", line) or re.match(r"^\s*\d+\s+.+", line):
-            clean_lines.append(line)
-    return clean_lines
-
-def parse_toc_hierarchy(column_text):
-    """
-    Parse TOC lines into a structured Level 1 and Level 2 hierarchy for a column.
-    Args:
-        column_text (str): OCR-extracted text from a column.
-    Returns:
-        dict: Structured TOC for the column.
+        dict: Structured TOC with Level 1 and Level 2 entries.
     """
     toc_structure = {}
     current_level1 = None
-    lines = clean_toc_text(column_text)
+
+    # Regex patterns for Level 1 and Level 2
+    level1_patterns = [r"^\d+\.\s+.+", r"^\d+\s+-\s+.+", r"^\d+:\s+.+"]  # Variations for Level 1
+    level2_patterns = [r"^\s{2,}\d+\s+.+", r"^\s{2,}.+"]  # Indented or child lines
 
     for line in lines:
-        if re.match(r"^\d+\.\s+.+", line):  # Level 1: "1. Birkenstock"
+        line = line.strip()
+        if not line:
+            continue
+
+        # Check for Level 1 using multiple patterns
+        if any(re.match(p, line) for p in level1_patterns):
             current_level1 = line
             toc_structure[current_level1] = []
-        elif re.match(r"^\s*\d+\s+.+", line):  # Level 2: "1 Earnings Report"
-            if current_level1:
-                toc_structure[current_level1].append(line.strip())
+        # Check for Level 2 (child entries) under current Level 1
+        elif current_level1 and any(re.match(p, line) for p in level2_patterns):
+            toc_structure[current_level1].append(line.strip())
+        # Reassociate split lines (append to last valid entry)
+        elif current_level1 and len(line) > 3:
+            toc_structure[current_level1][-1] += f" {line.strip()}"
+
     return toc_structure
 
-def merge_toc(left_toc, right_toc):
+def merge_columns(left_lines, right_lines):
     """
-    Merge TOC structures from left and right columns.
+    Merge TOC entries from two columns.
     Args:
-        left_toc (dict): TOC from the left column.
-        right_toc (dict): TOC from the right column.
+        left_lines (list): TOC lines from the left column.
+        right_lines (list): TOC lines from the right column.
     Returns:
-        dict: Combined TOC preserving order.
+        list: Combined lines from both columns.
     """
-    merged_toc = left_toc.copy()
-    merged_toc.update(right_toc)  # Append right column TOC after left column
-    return merged_toc
+    return left_lines + right_lines
 
 def process_toc(pdf_path):
     """
-    Process the Table of Contents from a PDF page with two columns.
+    Process the Table of Contents dynamically from a PDF.
     Args:
         pdf_path (str): Path to the PDF file.
     Returns:
-        dict: Final structured TOC.
+        dict: Final structured TOC with Level 1 and Level 2 entries.
     """
-    # Step 1: Extract text from Page 1 and fallback to Page 2
-    for page_num in [0, 1]:
-        left_text, right_text = extract_text_from_columns(pdf_path, page=page_num)
+    for page_num in [0, 1]:  # Check Page 1 first, then fallback to Page 2
+        left_lines, right_lines = extract_text_from_columns(pdf_path, page=page_num)
+        combined_lines = merge_columns(left_lines, right_lines)
 
-        if "Table of Contents" in left_text or "Table of Contents" in right_text:
+        if any("Table of Contents" in line for line in combined_lines):
             print(f"TOC Found on Page {page_num + 1}")
-            left_toc = parse_toc_hierarchy(left_text)
-            right_toc = parse_toc_hierarchy(right_text)
-            return merge_toc(left_toc, right_toc)
+            return identify_toc_entries(combined_lines)
 
     print("Table of Contents not found.")
     return {}
@@ -114,7 +104,7 @@ def print_clean_toc(toc_structure):
 
 def get_toc(toc_structure):
     """
-    Return the structured TOC in a clean dictionary format.
+    Return the TOC structure as a clean dictionary.
     Args:
         toc_structure (dict): Structured TOC.
     Returns:
@@ -124,7 +114,7 @@ def get_toc(toc_structure):
 
 
 # === Usage ===
-pdf_path = "your_pdf_path_here.pdf"  # Replace with your PDF path
+pdf_path = "your_pdf_path_here.pdf"  # Replace with the path to your PDF
 
 # Step 1: Process TOC dynamically
 toc_structure = process_toc(pdf_path)
