@@ -2,31 +2,34 @@ import pandas as pd
 import plotly.express as px
 
 # Load the data
-file_path = "your_excel_file.xlsx"  # Update this with your file path
-df = pd.read_excel(file_path, sheet_name='parsed_logs')  # Adjust the sheet name if needed
+file_path = "your_excel_file.xlsx"  # Replace with your actual file path
+df = pd.read_excel(file_path, sheet_name='parsed_logs')
 
-# Convert 'Timestamp' to datetime
+# Convert 'Timestamp' to datetime and set as index
 df['Timestamp'] = pd.to_datetime(df['Timestamp'])
+df.set_index('Timestamp', inplace=True)
 
-# Filter data for 'summary', 'qa', and overall usage
-df_summary = df[df['Action'] == 'sum:result:summary']
-df_qa = df[df['Action'] == 'qa:result']
+# Resample data to ensure continuous time series at a desired frequency (e.g., 1 minute)
+summary_counts = df[df['Action'] == 'sum:result:summary'].resample('T').size().rename('Summary Count')
+qa_counts = df[df['Action'] == 'qa:result'].resample('T').size().rename('QA Count')
+overall_counts = df.resample('T').size().rename('Overall Count')
 
-# Group counts by timestamp
-summary_counts = df_summary.groupby('Timestamp').size().reset_index(name='Count')
-qa_counts = df_qa.groupby('Timestamp').size().reset_index(name='Count')
-overall_counts = df.groupby('Timestamp').size().reset_index(name='Count')
+# Combine all counts into a single DataFrame
+merged_df = pd.concat([summary_counts, qa_counts, overall_counts], axis=1).fillna(0)
 
-# Plot all three time series
-fig = px.line(summary_counts, x='Timestamp', y='Count', title='Time Series of Actions', 
-              labels={'Count': 'Action Count', 'Timestamp': 'Time'}, line_shape='linear', 
-              markers=True, color_discrete_sequence=['blue'], 
-              template='plotly')
+# Reset index for plotting
+merged_df.reset_index(inplace=True)
 
-fig.add_scatter(x=qa_counts['Timestamp'], y=qa_counts['Count'], mode='lines+markers',
-                name='QA Actions', line=dict(color='red'))
-fig.add_scatter(x=overall_counts['Timestamp'], y=overall_counts['Count'], mode='lines+markers',
-                name='Overall Usage', line=dict(color='green'))
+# Plot the time series using Plotly
+fig = px.line(
+    merged_df, 
+    x='Timestamp', 
+    y=['Summary Count', 'QA Count', 'Overall Count'],
+    title='Time Series of Actions with Resampling',
+    labels={'value': 'Action Count', 'Timestamp': 'Time'},
+    line_shape='linear',
+    markers=True
+)
 
-# Show plot
+# Show the plot
 fig.show()
