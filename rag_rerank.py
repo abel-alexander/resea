@@ -20,15 +20,19 @@ merged_df = pd.concat([summary_cumsum, qa_cumsum, overall_cumsum], axis=1).filln
 # Reset index for plotting
 merged_df.reset_index(inplace=True)
 
-# Plot the cumulative time series using Plotly
-fig = px.line(
-    merged_df, 
-    x='Timestamp', 
-    y=['Summary Count', 'QA Count', 'Overall Count'],
-    title='Cumulative Time Series of Actions',
-    labels={'value': 'Cumulative Count', 'Timestamp': 'Time'},
-    line_shape='linear',
-    markers=True
+# Melt the DataFrame for easier plotting
+melted_df = merged_df.melt(id_vars='Timestamp', value_vars=['Summary Count', 'QA Count', 'Overall Count'],
+                           var_name='Action Type', value_name='Cumulative Count')
+
+# Plot the cumulative bar chart
+fig = px.bar(
+    melted_df,
+    x='Timestamp',
+    y='Cumulative Count',
+    color='Action Type',
+    title='Cumulative Actions as a Bar Chart',
+    labels={'Cumulative Count': 'Cumulative Count', 'Timestamp': 'Time'},
+    barmode='group'
 )
 
 # Show the plot
