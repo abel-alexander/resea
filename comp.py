@@ -107,3 +107,5 @@ clean_toc = get_toc(toc_structure)  # Clean TOC for further use
 
 print("\nget_toc Result:")
 print(clean_toc)
+
+new
