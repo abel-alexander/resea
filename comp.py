@@ -10,7 +10,7 @@ def extract_text_from_columns(pdf_path, page):
         pdf_path (str): Path to the PDF file.
         page (int): Page number to process.
     Returns:
-        list: OCR text from left and right columns.
+        list: Combined OCR text from left and right columns.
     """
     pdf = fitz.open(pdf_path)
     pix = pdf[page].get_pixmap()
@@ -27,42 +27,44 @@ def extract_text_from_columns(pdf_path, page):
     pdf.close()
     return left_text.split("\n"), right_text.split("\n")
 
-def identify_toc_entries(lines):
+def clean_line(line):
     """
-    Identify Level 1 entries based on the first 5 characters and handle split lines.
+    Remove dates or parenthesis like (3.5.2024) from a line.
     Args:
-        lines (list): List of lines from OCR text.
+        line (str): Input line.
     Returns:
-        dict: Structured TOC with Level 1 entries.
+        str: Cleaned line without dates or parentheses.
     """
-    toc_structure = {}
-    current_level1 = None
+    return re.sub(r"\(.*?\)", "", line).strip()
+
+def extract_toc_below_title(lines):
+    """
+    Extract TOC lines that appear after 'Table of Contents' and start with indexing.
+    Args:
+        lines (list): List of lines extracted from OCR.
+    Returns:
+        list: Cleaned TOC entries with original indexing.
+    """
+    toc_entries = []
+    process_lines = False
 
     for line in lines:
         line = line.strip()
-        if not line:  # Skip empty lines
+
+        # Start processing only after encountering 'Table of Contents'
+        if "Table of Contents" in line:
+            process_lines = True
             continue
 
-        # Check the first 5 characters for valid Level 1 patterns
-        if len(line) >= 5 and re.match(r"^\d+\.\s", line[:5]):
-            current_level1 = line
-            toc_structure[current_level1] = []
-        # Append split lines to the last Level 1 entry
-        elif current_level1 and len(line) > 3:
-            toc_structure[current_level1].append(line)
+        if not process_lines or not line:
+            continue
 
-    return toc_structure
+        # Only include lines starting with indexing like '1.', '2.', etc.
+        if re.match(r"^\d+\.\s", line):  # Strict pattern for valid Level 1
+            cleaned_line = clean_line(line)
+            toc_entries.append(cleaned_line)
 
-def merge_columns(left_lines, right_lines):
-    """
-    Merge TOC entries from two columns.
-    Args:
-        left_lines (list): TOC lines from the left column.
-        right_lines (list): TOC lines from the right column.
-    Returns:
-        list: Combined lines from both columns.
-    """
-    return left_lines + right_lines
+    return toc_entries
 
 def process_toc(pdf_path):
     """
@@ -70,50 +72,26 @@ def process_toc(pdf_path):
     Args:
         pdf_path (str): Path to the PDF file.
     Returns:
-        dict: Final structured TOC.
+        list: Final TOC entries as extracted.
     """
-    for page_num in [0, 1]:  # Prioritize Page 1, then Page 2
+    for page_num in [0, 1]:  # Check Page 1, fallback to Page 2
         left_lines, right_lines = extract_text_from_columns(pdf_path, page=page_num)
-        combined_lines = merge_columns(left_lines, right_lines)
+        combined_lines = left_lines + right_lines
 
         if any("Table of Contents" in line for line in combined_lines):
             print(f"TOC Found on Page {page_num + 1}")
-            return identify_toc_entries(combined_lines)
+            return extract_toc_below_title(combined_lines)
 
     print("Table of Contents not found.")
-    return {}
-
-def print_clean_toc(toc_structure):
-    """
-    Print the TOC structure in a clean format.
-    Args:
-        toc_structure (dict): Structured TOC.
-    """
-    print("\nCleaned Table of Contents:")
-    for idx, (level1, details) in enumerate(toc_structure.items(), 1):
-        print(f"{idx}. {level1}")
-        for detail in details:
-            print(f"   - {detail}")
-
-def get_toc(toc_structure):
-    """
-    Return the TOC structure as a clean dictionary.
-    Args:
-        toc_structure (dict): Structured TOC.
-    Returns:
-        dict: Clean TOC.
-    """
-    return toc_structure
+    return []
 
 # === Usage ===
 pdf_path = "your_pdf_path_here.pdf"  # Replace with your PDF file path
 
 # Step 1: Process TOC dynamically
-toc_structure = process_toc(pdf_path)
+toc_entries = process_toc(pdf_path)
 
 # Step 2: Display and use TOC
-print_clean_toc(toc_structure)
-clean_toc = get_toc(toc_structure)
-
-print("\nget_toc Result:")
-print(clean_toc)
+print("\nCleaned Table of Contents:")
+for entry in toc_entries:
+    print(entry)
