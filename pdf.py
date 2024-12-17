@@ -1,47 +1,118 @@
-from rouge_score import rouge_scorer  # Make sure to install rouge_score library if not already
+# Install required libraries before running this code:
+# pip install camelot-py[cv] pdfplumber pymupdf pytesseract opencv-python-headless pdf2image
 
-# Define a function to calculate ROUGE score
-def calculate_rouge(output, reference):
-    scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
-    scores = scorer.score(reference, output)
-    return scores
+import camelot
+import pdfplumber
+import fitz  # PyMuPDF
+import pytesseract
+from pdf2image import convert_from_path
+import cv2
+import numpy as np
 
-# Existing code
-files = ["file1.pdf", "file2.pdf", ...]  # your files
-for file in files:
-    st.session_state.pdf_file_name = file
-    file_name = f'/path/to/your/files/{file}'  # Update this path as needed
+# 1. Camelot - Structured PDFs
+def extract_tables_camelot(pdf_path, pages="all", flavor="stream"):
+    """
+    Extract tables using Camelot.
+    Args:
+        pdf_path (str): Path to the PDF file.
+        pages (str): Pages to extract tables from (default: 'all').
+        flavor (str): 'stream' for loose tables, 'lattice' for grid-like tables.
+    Returns:
+        list: List of tables as pandas DataFrames.
+    """
+    tables = camelot.read_pdf(pdf_path, pages=pages, flavor=flavor)
+    return [table.df for table in tables]  # Return tables as DataFrames
 
-    st.subheader(file)
-    q = qa.get_q(i)
-    while q != "not found":
-        start_time = time.process_time()
-        with col_llama:
-            rs_llama = mistral.qa2(file_name, q)
-            end_time = time.process_time()
-            inference_time_llama = end_time - start_time
-            st.text(rs_llama)
-            st.markdown(rs_llama)
 
-        with col_llama2:
-            start_time = time.process_time()
-            rs_llama2 = mistral.test_qa(file_name, q)
-            end_time = time.process_time()
-            inference_time_llama2 = end_time - start_time
-            st.text(rs_llama2)
-            st.markdown(rs_llama2)
+# 2. PDFplumber - Unstructured PDFs
+def extract_tables_pdfplumber(pdf_path):
+    """
+    Extract tables using PDFplumber.
+    Args:
+        pdf_path (str): Path to the PDF file.
+    Returns:
+        list: List of tables as nested lists.
+    """
+    tables = []
+    with pdfplumber.open(pdf_path) as pdf:
+        for page_num, page in enumerate(pdf.pages):
+            page_tables = page.extract_tables()
+            if page_tables:
+                print(f"Tables found on page {page_num + 1}")
+            tables.extend(page_tables)
+    return tables
 
-        # Display inference times
-        st.write(f"Inference Time (Col Llama): {inference_time_llama} seconds")
-        st.write(f"Inference Time (Col Llama2): {inference_time_llama2} seconds")
 
-        # Calculate ROUGE scores between outputs of two columns
-        rouge_scores = calculate_rouge(rs_llama, rs_llama2)
-        st.write("ROUGE Scores:")
-        st.write(f"ROUGE-1: {rouge_scores['rouge1'].fmeasure}")
-        st.write(f"ROUGE-2: {rouge_scores['rouge2'].fmeasure}")
-        st.write(f"ROUGE-L: {rouge_scores['rougeL'].fmeasure}")
+# 3. PyMuPDF (fitz) - Fast Extraction of Text Blocks
+def extract_tables_pymupdf(pdf_path):
+    """
+    Extract tables as text blocks using PyMuPDF.
+    Args:
+        pdf_path (str): Path to the PDF file.
+    Returns:
+        list: List of text blocks detected on each page.
+    """
+    tables = []
+    doc = fitz.open(pdf_path)
+    for page_num, page in enumerate(doc):
+        blocks = page.get_text("blocks")
+        print(f"Text blocks on page {page_num + 1}:")
+        for block in blocks:
+            print(block)  # Each block contains coordinates and text
+        tables.append(blocks)
+    return tables
 
-        # Proceed to the next question
-        i += 1
-        q = qa.get_q(i)
+
+# 4. Tesseract + OpenCV - Scanned PDFs
+def extract_tables_ocr(pdf_path, page_num=0):
+    """
+    Extract tables from scanned PDFs using OCR and OpenCV.
+    Args:
+        pdf_path (str): Path to the PDF file.
+        page_num (int): Page number to process (0-indexed).
+    Returns:
+        str: Extracted text from the table.
+    """
+    # Convert PDF page to image
+    images = convert_from_path(pdf_path, first_page=page_num+1, last_page=page_num+1)
+    image = np.array(images[0])
+
+    # Convert to grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # Thresholding to clean up the image
+    _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY_INV)
+
+    # Detect table boundaries using dilation
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 10))
+    dilated = cv2.dilate(thresh, kernel, iterations=1)
+
+    # Extract text using Tesseract
+    text = pytesseract.image_to_string(dilated, config="--psm 6")
+    return text
+
+
+# ---------------- RUN THE FUNCTIONS ----------------
+if __name__ == "__main__":
+    pdf_path = "example.pdf"  # Change this to your PDF file path
+
+    # 1. Extract tables with Camelot
+    print("Extracting tables using Camelot...")
+    camelot_tables = extract_tables_camelot(pdf_path, pages="1", flavor="stream")
+    for idx, table in enumerate(camelot_tables):
+        print(f"Camelot Table {idx + 1}:\n", table)
+
+    # 2. Extract tables with PDFplumber
+    print("\nExtracting tables using PDFplumber...")
+    plumber_tables = extract_tables_pdfplumber(pdf_path)
+    for idx, table in enumerate(plumber_tables):
+        print(f"PDFplumber Table {idx + 1}:\n", table)
+
+    # 3. Extract text blocks with PyMuPDF
+    print("\nExtracting text blocks using PyMuPDF...")
+    pymupdf_tables = extract_tables_pymupdf(pdf_path)
+
+    # 4. Extract tables from scanned PDFs using OCR
+    print("\nExtracting tables using Tesseract OCR...")
+    ocr_table_text = extract_tables_ocr(pdf_path, page_num=0)
+    print("OCR Extracted Table Text:\n", ocr_table_text)
