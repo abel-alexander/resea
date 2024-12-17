@@ -1,91 +1,93 @@
-import pdfplumber
-import fitz  # PyMuPDF
-import PyPDF2
-from pdfminer.high_level import extract_text as pdfminer_extract_text
+import re
 import pytesseract
 from PIL import Image
-from io import BytesIO
+import fitz  # PyMuPDF for PDFs
 
-# Function to extract text using pdfminer.six
-def extract_with_pdfminer(pdf_path):
-    try:
-        text = pdfminer_extract_text(pdf_path)
-        with open("output_pdfminer.txt", "w", encoding="utf-8") as f:
-            f.write(text)
-        print("Extracted text using pdfminer.six saved to output_pdfminer.txt")
-    except Exception as e:
-        print(f"pdfminer.six extraction failed: {e}")
+def extract_toc_from_images(image_files):
+    """
+    Extract the Table of Contents (TOC) from image files using OCR.
+    Args:
+        image_files (list): List of image file paths.
+    Returns:
+        list: Cleaned TOC entries with titles and hyperlinks.
+    """
+    toc_entries = []
 
-# Function to extract text using pdfplumber
-def extract_with_pdfplumber(pdf_path):
-    try:
-        text = ""
-        with pdfplumber.open(pdf_path) as pdf:
-            for page in pdf.pages:
-                text += page.extract_text() + "\n"
-        with open("output_pdfplumber.txt", "w", encoding="utf-8") as f:
-            f.write(text)
-        print("Extracted text using pdfplumber saved to output_pdfplumber.txt")
-    except Exception as e:
-        print(f"pdfplumber extraction failed: {e}")
+    for image_path in image_files:
+        # Perform OCR on the image
+        text = pytesseract.image_to_string(Image.open(image_path))
 
-# Function to extract text using PyMuPDF
-def extract_with_pymupdf(pdf_path):
-    try:
-        text = ""
-        with fitz.open(pdf_path) as pdf:
-            for page_num, page in enumerate(pdf, start=1):
-                blocks = page.get_text("blocks")
-                blocks = sorted(blocks, key=lambda b: (b[1], b[0]))  # Sort blocks by y, then x
-                page_text = "\n".join([block[4] for block in blocks])
-                text += f"\n--- Page {page_num} ---\n" + page_text
-        with open("output_pymupdf.txt", "w", encoding="utf-8") as f:
-            f.write(text)
-        print("Extracted text using PyMuPDF saved to output_pymupdf.txt")
-    except Exception as e:
-        print(f"PyMuPDF extraction failed: {e}")
+        # Identify Table of Contents section using regex
+        if "Table of Contents" in text:
+            print(f"\nTOC Found in: {image_path}")
+            # Extract lines under Table of Contents
+            lines = text.split("\n")
+            for line in lines:
+                # Match entries like "1. Title Page" or "3. Subsection"
+                match = re.match(r"(\d+)\.\s+(.+)", line)
+                if match:
+                    page, title = match.groups()
+                    toc_entries.append({"Title": title.strip(), "Page": int(page)})
 
-# Function to extract text using PyPDF2
-def extract_with_pypdf2(pdf_path):
-    try:
-        text = ""
-        with open(pdf_path, "rb") as f:
-            reader = PyPDF2.PdfReader(f)
-            for page_num in range(len(reader.pages)):
-                page = reader.pages[page_num]
-                text += page.extract_text() or "" + "\n"
-        with open("output_pypdf2.txt", "w", encoding="utf-8") as f:
-            f.write(text)
-        print("Extracted text using PyPDF2 saved to output_pypdf2.txt")
-    except Exception as e:
-        print(f"PyPDF2 extraction failed: {e}")
+    return toc_entries
 
-# Function to extract text using OCR with PyMuPDF and pytesseract
-def extract_with_ocr(pdf_path):
-    try:
-        text = ""
-        with fitz.open(pdf_path) as pdf:
-            for page_num, page in enumerate(pdf, start=1):
-                pix = page.get_pixmap()
-                img = Image.open(BytesIO(pix.tobytes()))
-                ocr_text = pytesseract.image_to_string(img)
-                text += f"\n--- OCR Page {page_num} ---\n" + ocr_text
-        with open("output_ocr.txt", "w", encoding="utf-8") as f:
-            f.write(text)
-        print("Extracted text using OCR saved to output_ocr.txt")
-    except Exception as e:
-        print(f"OCR extraction failed: {e}")
 
-# Main function to perform all extractions
-def extract_all_methods(pdf_path):
-    print(f"Extracting from {pdf_path} using various methods...")
-    extract_with_pdfminer(pdf_path)
-    extract_with_pdfplumber(pdf_path)
-    extract_with_pymupdf(pdf_path)
-    extract_with_pypdf2(pdf_path)
-    extract_with_ocr(pdf_path)
-    print("Extraction completed. Check the output text files for comparison.")
+def extract_toc_from_pdf(pdf_path):
+    """
+    Extract hyperlinks from PDFs and fetch the TOC.
+    Args:
+        pdf_path (str): Path to the PDF.
+    Returns:
+        list: TOC entries with titles and target pages.
+    """
+    toc_entries = []
+    pdf = fitz.open(pdf_path)
+    
+    for page_num, page in enumerate(pdf, start=1):
+        links = page.get_links()  # Extract hyperlinks from each page
+        text = page.get_text("text")
 
-# Provide the path to your PDF file
-pdf_path = "/Users/amruthaantony/PycharmProjects/data_extraction/pib1.pdf"
-extract_all_methods(pdf_path)
+        # Check for Table of Contents
+        if "Table of Contents" in text:
+            print(f"TOC Found on Page {page_num}")
+            lines = text.split("\n")
+            for line in lines:
+                # Match TOC format (e.g., 1. Title, Hyperlinked)
+                match = re.match(r"(\d+)\.\s+(.+)", line)
+                if match:
+                    page_ref, title = match.groups()
+                    target_page = None
+
+                    # Look for hyperlink pointing to the target page
+                    for link in links:
+                        if "page" in link and link["page"] == int(page_ref):
+                            target_page = link["page"] + 1  # PDF pages start at 0
+                            break
+                    
+                    toc_entries.append({"Title": title.strip(), "Target Page": target_page})
+    
+    pdf.close()
+    return toc_entries
+
+
+def format_clean_toc(toc_entries):
+    """
+    Clean and format TOC entries into a readable format.
+    Args:
+        toc_entries (list): List of TOC entries.
+    """
+    print("\nClean Table of Contents:")
+    for entry in toc_entries:
+        print(f"- {entry['Title']} (Page: {entry.get('Target Page', 'N/A')})")
+
+
+# === Usage ===
+# For images:
+image_files = ["image1.jpeg", "image2.jpeg", "image3.jpeg", "image4.jpeg"]  # Replace with paths
+toc_from_images = extract_toc_from_images(image_files)
+format_clean_toc(toc_from_images)
+
+# For PDFs:
+pdf_path = "sample.pdf"  # Replace with your PDF file path
+toc_from_pdf = extract_toc_from_pdf(pdf_path)
+format_clean_toc(toc_from_pdf)
