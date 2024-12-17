@@ -31,7 +31,7 @@ def identify_toc_entries(lines):
     """
     Identify Level 1 and Level 2 TOC entries using multi-pattern regex.
     Args:
-        lines (list): List of lines extracted from OCR.
+        lines (list): List of extracted lines.
     Returns:
         dict: Structured TOC with Level 1 and Level 2 entries.
     """
@@ -56,9 +56,11 @@ def identify_toc_entries(lines):
             toc_structure[current_level1].append(line.strip())
         # Reassociate split lines (append to last valid entry)
         elif current_level1 and len(line) > 3:
-            toc_structure[current_level1][-1] += f" {line.strip()}"
+            if toc_structure[current_level1]:  # Prevent IndexError
+                toc_structure[current_level1][-1] += f" {line.strip()}"
 
     return toc_structure
+
 
 def merge_columns(left_lines, right_lines):
     """
