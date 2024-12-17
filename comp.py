@@ -3,7 +3,7 @@ import re
 
 def process_toc_page(pdf_path):
     """
-    Process pages with Table of Contents, identify hyperlinks, and extract targets.
+    Process the TOC pages (limited to Page 1 and 2), identify hyperlinks, and extract targets.
     Args:
         pdf_path (str): Path to the PDF file.
     Returns:
@@ -12,27 +12,31 @@ def process_toc_page(pdf_path):
     pdf = fitz.open(pdf_path)
     toc_entries = []
     
-    for page_num, page in enumerate(pdf, start=1):
+    for page_num in range(min(2, len(pdf))):  # Check only Page 1 and Page 2
+        page = pdf[page_num]
         text = page.get_text("text")
-        links = page.get_links()  # Extract hyperlinks
+        links = page.get_links()
         
-        # Step 1: Check if 'Table of Contents' exists on the page
+        # Step 1: Check if 'Table of Contents' exists
         if "Table of Contents" in text:
-            print(f"TOC Found on Page {page_num}")
+            print(f"TOC Found on Page {page_num + 1}")
             
-            # Step 2: If more than 3 hyperlinks, process the page
+            # Step 2: Process hyperlinks if more than 3 exist
             if len(links) > 3:
-                print(f"Processing {len(links)} hyperlinks...")
-                
-                # Step 3: Extract the TOC titles and targets
+                print(f"Processing {len(links)} hyperlinks on Page {page_num + 1}...")
                 lines = text.split("\n")
+                
+                # Step 3: Extract TOC titles and their targets
                 for link in links:
-                    target_page = link.get("page", None)  # Get the target page
+                    target_page = link.get("page", None)
                     if target_page is not None:
-                        # Match TOC format like '1. Title' or 'Title'
+                        # Match TOC format: '1. Title' or 'Title'
                         for line in lines:
                             if re.match(r"^\d+\.\s+.+|^[A-Za-z].+", line):
-                                toc_entries.append({"Title": line.strip(), "Target Page": target_page + 1})
+                                toc_entries.append({
+                                    "Title": line.strip(),
+                                    "Target Page": target_page + 1  # Convert to 1-based index
+                                })
                                 break
 
     pdf.close()
@@ -41,9 +45,9 @@ def process_toc_page(pdf_path):
 
 def format_clean_toc(toc_entries):
     """
-    Clean and format TOC entries into a readable format.
+    Format TOC entries into a clean, readable format.
     Args:
-        toc_entries (list): List of TOC entries.
+        toc_entries (list): List of TOC entries with titles and pages.
     """
     print("\nCleaned Table of Contents:")
     for entry in toc_entries:
