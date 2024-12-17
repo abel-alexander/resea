@@ -116,3 +116,32 @@ if __name__ == "__main__":
     print("\nExtracting tables using Tesseract OCR...")
     ocr_table_text = extract_tables_ocr(pdf_path, page_num=0)
     print("OCR Extracted Table Text:\n", ocr_table_text)
+
+
+import pandas as pd
+
+def reconstruct_table_from_blocks(blocks):
+    """
+    Reconstruct a table-like structure from text blocks.
+    Args:
+        blocks (list): List of text blocks (x0, y0, x1, y1, text).
+    Returns:
+        pd.DataFrame: Table reconstructed from blocks.
+    """
+    # Sort blocks by y-coordinates (rows)
+    blocks_sorted = sorted(blocks, key=lambda b: b[1])  # Sort by y0
+    
+    # Build table rows
+    rows = []
+    for block in blocks_sorted:
+        rows.append(block[4])  # Extract text content
+
+    # Split rows by spaces to simulate columns
+    table = [row.split() for row in rows]
+    return pd.DataFrame(table)
+
+# Example usage
+doc = fitz.open("example.pdf")
+blocks = doc[0].get_text("blocks")  # Extract text blocks from page 0
+table_df = reconstruct_table_from_blocks(blocks)
+print(table_df)
