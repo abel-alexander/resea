@@ -29,37 +29,52 @@ def extract_text_from_columns(pdf_path, page):
 
 def identify_toc_entries(lines):
     """
-    Identify Level 1 and Level 2 TOC entries using multi-pattern regex.
+    Identify Level 1 and associate split lines properly.
     Args:
-        lines (list): List of extracted lines.
+        lines (list): List of lines from OCR text.
     Returns:
-        dict: Structured TOC with Level 1 and Level 2 entries.
+        dict: Structured TOC with Level 1 entries and their content.
     """
     toc_structure = {}
     current_level1 = None
 
-    # Regex patterns for Level 1 and Level 2
-    level1_patterns = [r"^\d+\.\s+.+", r"^\d+\s+-\s+.+", r"^\d+:\s+.+"]  # Variations for Level 1
-    level2_patterns = [r"^\s{2,}\d+\s+.+", r"^\s{2,}.+"]  # Indented or child lines
+    # Level 1 patterns: Strict numbering
+    level1_pattern = r"^\d+\.\s+.+"
+    valid_line_pattern = r"^[A-Za-z0-9].*"
 
     for line in lines:
         line = line.strip()
-        if not line:
+        if not line:  # Skip empty lines
             continue
 
-        # Check for Level 1 using multiple patterns
-        if any(re.match(p, line) for p in level1_patterns):
+        # Match Level 1 (e.g., "1. Amer Sports FY 2023")
+        if re.match(level1_pattern, line):
             current_level1 = line
             toc_structure[current_level1] = []
-        # Check for Level 2 (child entries) under current Level 1
-        elif current_level1 and any(re.match(p, line) for p in level2_patterns):
-            toc_structure[current_level1].append(line.strip())
-        # Reassociate split lines (append to last valid entry)
-        elif current_level1 and len(line) > 3:
-            if toc_structure[current_level1]:  # Prevent IndexError
-                toc_structure[current_level1][-1] += f" {line.strip()}"
+        # Handle split lines: Append to previous Level 1 if valid
+        elif current_level1 and re.match(valid_line_pattern, line):
+            toc_structure[current_level1][-1] += f" {line.strip()}" if toc_structure[current_level1] else line
 
     return toc_structure
+
+def process_toc(pdf_path):
+    """
+    Process TOC dynamically from a PDF with two-column handling.
+    Args:
+        pdf_path (str): Path to the PDF file.
+    Returns:
+        dict: Final structured TOC.
+    """
+    for page_num in [0, 1]:  # Prioritize Page 1, then Page 2
+        left_lines, right_lines = extract_text_from_columns(pdf_path, page=page_num)
+        combined_lines = merge_columns(left_lines, right_lines)
+
+        if any("Table of Contents" in line for line in combined_lines):
+            print(f"TOC Found on Page {page_num + 1}")
+            return identify_toc_entries(combined_lines)
+
+    print("Table of Contents not found.")
+    return {}
 
 
 def merge_columns(left_lines, right_lines):
@@ -73,24 +88,7 @@ def merge_columns(left_lines, right_lines):
     """
     return left_lines + right_lines
 
-def process_toc(pdf_path):
-    """
-    Process the Table of Contents dynamically from a PDF.
-    Args:
-        pdf_path (str): Path to the PDF file.
-    Returns:
-        dict: Final structured TOC with Level 1 and Level 2 entries.
-    """
-    for page_num in [0, 1]:  # Check Page 1 first, then fallback to Page 2
-        left_lines, right_lines = extract_text_from_columns(pdf_path, page=page_num)
-        combined_lines = merge_columns(left_lines, right_lines)
 
-        if any("Table of Contents" in line for line in combined_lines):
-            print(f"TOC Found on Page {page_num + 1}")
-            return identify_toc_entries(combined_lines)
-
-    print("Table of Contents not found.")
-    return {}
 
 def print_clean_toc(toc_structure):
     """
