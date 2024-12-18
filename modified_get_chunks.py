@@ -52,30 +52,25 @@ def get_chunks(file_name):
 
     # Existing merging logic
     rs1 = []
-    # merge_incomplete_blocks
     for i in range(0, len(rs)):
-        # Commenting out old line
-        # rs1.append(rs[i].copy())
-        if rs1 and rs1[-1]['text'][-1] in ['-', '_'] or rs1[-1]['text'][-1] not in ['.', '!', '?']:
-            rs1[-1]['text'] += " " + rs[i]['text']  # New line: Merge incomplete text
+        if rs1 and (rs1[-1]['text'][-1] in ['-', '_'] or rs1[-1]['text'][-1] not in ['.', '!', '?']):
+            rs1[-1]['text'] += " " + rs[i]['text']
         else:
             rs1.append(rs[i].copy())
 
-    fs2 = []
+    rs2 = []
     for i in range(0, len(rs1)):
-        # Commenting out old line
-        # fs2.append(rs1[i].copy())
-        fs2.append(rs1[i].copy())  # New line: Append cleaned-up text blocks and tables
+        rs2.append(rs1[i].copy())  # Append merged text blocks and tables
 
-        # Additional splitting logic for text chunks
+        # Splitting sentences in text blocks
         for sentence in split_text(rs1[i]['text']):
             temp = rs1[i].copy()
             temp['text'] = sentence
-            fs2.append(temp)
+            rs2.append(temp)
 
     # Final metadata generation
     company_name = Path(file_name).stem
     add_processed_index = {'company_name': company_name, 'sourceRef': f"{file_name}"}
-    json.dump({'processed': fs2}, open(f"{file_name}_output.json", 'w', encoding='utf-8'), indent=4)
+    json.dump({'processed': rs2}, open(f"{file_name}_output.json", 'w', encoding='utf-8'), indent=4)
 
-    return fs2
+    return rs2
