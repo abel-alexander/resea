@@ -1,84 +1,87 @@
-import fitz  # PyMuPDF
-import cv2
-import numpy as np
+import re
+import pdfplumber
+import pandas as pd
 import os
+import shutil
+import numpy as np
+import json
 
-def pdf_to_images_pymupdf(pdf_path, output_folder="output_images"):
+def clear_previous_outputs(output_dir):
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    os.makedirs(output_dir)
+
+def sanitize_filename(filename):
+    sanitized = re.sub(r'[<>:"/\\|?.,*)(=-]', '_', filename)
+    sanitized = re.sub(r'\s+', '_', sanitized).replace('__', '_')
+    return sanitized[:255]
+
+def extract_text_within_bbox(page, bbox):
+    return page.within_bbox(bbox).extract_text()
+
+def get_table_bboxes(page):
+    return [table.bbox for table in page.find_tables()]
+
+def extract_titles_above_tables(page, table_bboxes):
+    titles = []
+    for table_bbox in table_bboxes:
+        title_bbox = (0, 0, page.width, table_bbox[1])  # Text above the table
+        title_text = extract_text_within_bbox(page, title_bbox)
+        if title_text:
+            lines = title_text.split('\n')[:5]  # Limit to top 5 lines
+            title = next((line.strip() for line in lines if line.startswith("Table")), None)
+            if title:
+                titles.append(title)
+    return titles
+
+def extract_tables_to_json(pdf_path, output_file, pages=None):
     """
-    Convert PDF pages to images using PyMuPDF.
+    Extract tables and titles from a PDF and save as a structured JSON file.
     Args:
-        pdf_path (str): Path to the PDF file.
-        output_folder (str): Folder to save the converted images.
-    Returns:
-        list: List of image file paths.
+        pdf_path (str): Path to the input PDF file.
+        output_file (str): Path to save the JSON output.
+        pages (list): Optional list of page numbers to process.
     """
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
+    all_tables = []
+    
+    with pdfplumber.open(pdf_path) as pdf:
+        pages = pages or range(len(pdf.pages))  # Default to all pages
+        for page_number in pages:
+            page = pdf.pages[page_number]
+            table_bboxes = get_table_bboxes(page)
+            titles = extract_titles_above_tables(page, table_bboxes)
+            tables = page.extract_tables()
 
-    doc = fitz.open(pdf_path)
-    image_paths = []
+            if tables:
+                for table_index, table in enumerate(tables):
+                    if not table or len(table) <= 1:
+                        print(f"Skipping empty table on Page {page_number + 1}")
+                        continue
 
-    for page_num in range(len(doc)):
-        # Render the page as an image
-        page = doc.load_page(page_num)
-        pix = page.get_pixmap()
-        image_path = os.path.join(output_folder, f"page_{page_num + 1}.png")
-        pix.save(image_path)
-        image_paths.append(image_path)
+                    # Convert table to DataFrame and then to JSON-friendly structure
+                    df = pd.DataFrame(table[1:], columns=table[0])
+                    df = df.fillna("")  # Replace NaN with empty strings
+                    table_data = df.to_dict(orient="records")
 
-    return image_paths
+                    # Prepare table metadata
+                    table_info = {
+                        "page_number": page_number + 1,
+                        "table_index": table_index + 1,
+                        "title": titles[table_index] if table_index < len(titles) else f"Table_Page{page_number + 1}_{table_index + 1}",
+                        "data": table_data
+                    }
 
-def detect_table_with_opencv(image_path, output_folder="output_tables"):
-    """
-    Detect and extract table boundaries from an image using OpenCV.
-    Args:
-        image_path (str): Path to the input image.
-        output_folder (str): Folder to save the detected tables.
-    """
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
+                    all_tables.append(table_info)
 
-    # Load the image
-    image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+    # Save all extracted tables to JSON
+    with open(output_file, "w", encoding="utf-8") as json_file:
+        json.dump(all_tables, json_file, indent=4, ensure_ascii=False)
+    print(f"Saved extracted tables to: {output_file}")
 
-    # Thresholding to get a binary image
-    _, thresh = cv2.threshold(image, 150, 255, cv2.THRESH_BINARY_INV)
+# Run the script
+pdf_path = "example.pdf"  # Replace with your PDF file path
+output_json = "extracted_tables.json"
 
-    # Detect horizontal and vertical lines using morphological operations
-    horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (25, 1))
-    vertical_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 25))
-
-    horizontal_lines = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, horizontal_kernel, iterations=2)
-    vertical_lines = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, vertical_kernel, iterations=2)
-
-    # Combine the detected lines
-    table_structure = cv2.add(horizontal_lines, vertical_lines)
-
-    # Find contours of the table
-    contours, _ = cv2.findContours(table_structure, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    # Draw contours to highlight table boundaries
-    result = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
-    for contour in contours:
-        cv2.drawContours(result, [contour], -1, (0, 255, 0), 2)  # Green color for tables
-
-    # Save the result
-    output_image_path = os.path.join(output_folder, os.path.basename(image_path).replace(".png", "_detected.png"))
-    cv2.imwrite(output_image_path, result)
-    print(f"Table detection saved at: {output_image_path}")
-
-# ---------------- RUN THE PROCESS ----------------
-if __name__ == "__main__":
-    pdf_path = "example.pdf"  # Replace with your PDF file path
-    output_folder_images = "output_images"  # Folder to store intermediate images
-    output_folder_tables = "output_tables"  # Folder to save table-detected images
-
-    # Step 1: Convert PDF pages to images using PyMuPDF
-    print("Converting PDF to images...")
-    image_paths = pdf_to_images_pymupdf(pdf_path, output_folder_images)
-
-    # Step 2: Process each image with OpenCV to detect tables
-    print("Detecting tables in images...")
-    for image_path in image_paths:
-        print(f"Processing {image_path}...")
-        detect_table_with_opencv(image_path, output_folder_tables)
+# Clear outputs and extract tables
+clear_previous_outputs("temp_outputs")  # Just to ensure clean run
+extract_tables_to_json(pdf_path, output_json)
