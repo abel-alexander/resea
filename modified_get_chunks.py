@@ -26,15 +26,26 @@ def extract_tables_from_file(file_name):
 def flatten_table_to_text(table_json):
     """
     Flattens table JSON into a readable text format preserving row-column structure.
+
+    Args:
+        table_json (list): The table data as JSON (list of dictionaries).
+
+    Returns:
+        str: Flattened table as text.
     """
     if not table_json or len(table_json) == 0:
         return "Empty Table"
 
+    # Extract table headers
     headers = list(table_json[0].keys())
-    rows = [headers]  # Table headers
-    rows.extend([[str(row.get(h, "")) for h in headers] for row in table_json])
+    rows = [headers]  # Start with headers
 
-    # Convert rows to readable text (Markdown-like format)
+    # Add each row's values, converting None to empty string
+    for row in table_json:
+        row_values = [str(row.get(h, "") or "") for h in headers]  # Replace None with empty string
+        rows.append(row_values)
+
+    # Convert rows into readable text (Markdown-like format)
     table_text = "\n".join([" | ".join(row) for row in rows])
     return f"Table Data:\n{table_text}"
 
