@@ -3,7 +3,6 @@ import pdfplumber
 import pandas as pd
 import os
 import shutil
-import numpy as np
 import json
 
 def clear_previous_outputs(output_dir):
@@ -34,6 +33,21 @@ def extract_titles_above_tables(page, table_bboxes):
                 titles.append(title)
     return titles
 
+def clean_table_headers_and_fix_items(df):
+    """
+    Clean table headers and ensure the first column is treated as row labels (Item).
+    Args:
+        df (pd.DataFrame): Extracted table as a DataFrame.
+    Returns:
+        pd.DataFrame: Cleaned table with "Item" as row labels.
+    """
+    if not df.empty:
+        # Promote the first column as "Item" (row headers)
+        new_columns = ["Item"] + [str(col).strip() if col else f"Column_{i}" for i, col in enumerate(df.columns[1:], start=1)]
+        df.columns = new_columns
+        return df.reset_index(drop=True)
+    return df
+
 def extract_tables_to_json(pdf_path, output_file, pages=None):
     """
     Extract tables and titles from a PDF and save as a structured JSON file.
@@ -43,14 +57,18 @@ def extract_tables_to_json(pdf_path, output_file, pages=None):
         pages (list): Optional list of page numbers to process.
     """
     all_tables = []
-    
+
     with pdfplumber.open(pdf_path) as pdf:
         pages = pages or range(len(pdf.pages))  # Default to all pages
         for page_number in pages:
             page = pdf.pages[page_number]
             table_bboxes = get_table_bboxes(page)
             titles = extract_titles_above_tables(page, table_bboxes)
-            tables = page.extract_tables()
+            tables = page.extract_tables({
+                "vertical_strategy": "text",
+                "horizontal_strategy": "lines",
+                "snap_tolerance": 3
+            })
 
             if tables:
                 for table_index, table in enumerate(tables):
@@ -58,9 +76,12 @@ def extract_tables_to_json(pdf_path, output_file, pages=None):
                         print(f"Skipping empty table on Page {page_number + 1}")
                         continue
 
-                    # Convert table to DataFrame and then to JSON-friendly structure
+                    # Convert to DataFrame and fix headers
                     df = pd.DataFrame(table[1:], columns=table[0])
-                    df = df.fillna("")  # Replace NaN with empty strings
+                    df = df.dropna(how="all").fillna("")  # Clean empty rows and missing values
+                    df = clean_table_headers_and_fix_items(df)  # Fix row labels
+
+                    # Convert to JSON-friendly structure
                     table_data = df.to_dict(orient="records")
 
                     # Prepare table metadata
@@ -70,10 +91,9 @@ def extract_tables_to_json(pdf_path, output_file, pages=None):
                         "title": titles[table_index] if table_index < len(titles) else f"Table_Page{page_number + 1}_{table_index + 1}",
                         "data": table_data
                     }
-
                     all_tables.append(table_info)
 
-    # Save all extracted tables to JSON
+    # Save all tables to JSON
     with open(output_file, "w", encoding="utf-8") as json_file:
         json.dump(all_tables, json_file, indent=4, ensure_ascii=False)
     print(f"Saved extracted tables to: {output_file}")
@@ -83,5 +103,5 @@ pdf_path = "example.pdf"  # Replace with your PDF file path
 output_json = "extracted_tables.json"
 
 # Clear outputs and extract tables
-clear_previous_outputs("temp_outputs")  # Just to ensure clean run
+clear_previous_outputs("temp_outputs")
 extract_tables_to_json(pdf_path, output_json)
