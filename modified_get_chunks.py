@@ -1,3 +1,45 @@
+
+import pdfplumber
+
+def extract_tables_from_file(file_name):
+    """
+    Extract tables from a PDF file and return them as JSON with metadata.
+    """
+    all_tables = []
+    with pdfplumber.open(file_name) as pdf:
+        for page_no, page in enumerate(pdf.pages):
+            tables = page.extract_tables()
+            if tables:
+                for table_index, table in enumerate(tables):
+                    # Convert table into structured JSON
+                    table_data = [dict(zip(table[0], row)) for row in table[1:] if len(row) == len(table[0])]
+                    table_info = {
+                        "page_number": page_no + 1,
+                        "table_index": table_index + 1,
+                        "title": f"Table_Page{page_no+1}_{table_index+1}",
+                        "data": table_data
+                    }
+                    all_tables.append(table_info)
+    return all_tables
+
+
+def flatten_table_to_text(table_json):
+    """
+    Flattens table JSON into a readable text format preserving row-column structure.
+    """
+    if not table_json or len(table_json) == 0:
+        return "Empty Table"
+
+    headers = list(table_json[0].keys())
+    rows = [headers]  # Table headers
+    rows.extend([[str(row.get(h, "")) for h in headers] for row in table_json])
+
+    # Convert rows to readable text (Markdown-like format)
+    table_text = "\n".join([" | ".join(row) for row in rows])
+    return f"Table Data:\n{table_text}"
+
+
+
 @st.cache_resource
 def pdf_get_chunks(file_name):
     """
