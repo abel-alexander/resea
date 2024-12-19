@@ -62,79 +62,63 @@ def pdf_get_chunks(file_name):
     Returns:
         list: A list of dictionaries containing text blocks and flattened tables.
     """
-    # Fetch Table of Contents (TOC) and sort locally
     tocs = pdf_get_toc(file_name)
-    tocs.sort(key=lambda x: x['id'], reverse=True)
+tocs.sort(key=lambda x: x['id'], reverse=True)
+rs = []
 
-    rs = []
+with fitz.open(file_name) as doc:
+    doc_title = doc.metadata['title']
+    page_no = 0
 
-    # Extract text blocks
-    with fitz.open(file_name) as doc:
-        for page_no in range(len(doc)):
-            page = doc[page_no]
-            title = get_title_from_page_no(tocs, page_no + 1)
+    while page_no < len(doc):
+        title, lvl = pdf_get_title_from_page_no(tocs, page_no+1)
+        if lvl == 2 and title != doc_title:
+            print(f"Title changed to: {title}")
+            doc_title = title
+            page_no -= 1
 
-            # OCR text extraction
-            if check_profile_name(title):
-                ocr_text = convert_image_to_string(page)
-                rs.append({
-                    'title': title,
-                    'page_no': page_no + 1,
-                    'block_no_from': 0,
-                    'block_no_to': 0,
-                    'text': ocr_text
-                })
-            else:
-                # Text blocks extraction
-                blks = page.get_text("blocks")
-                for blk in blks:
-                    rs.append({
-                        'title': title,
-                        'page_no': page_no + 1,
-                        'block_no_from': blk[5],
-                        'block_no_to': blk[6],
-                        'text': blk[4]
-                    })
+        print(f"Processing page {page_no+1}")
+        blks = pdf_get_page_blocks(page)
+        for blk in blks:
+            blk_text = pdf_block_post_process_text(blk[4])
+            rs.append({'title': title, 'page_no': page_no+1, 'block_no_from': blk[5], 'block_no_to': blk[6], 'text': blk_text})
 
-    # ----------------------------
-    # NEW: Table Extraction and Flattening
-    # ----------------------------
-    tables = extract_tables_from_file(file_name)  # Extract tables as JSON
-    for table in tables:
-        flattened_text = flatten_table_to_text(table['data'])  # Flatten the table into structured text
-        rs.append({
-            'title': table['title'],
-            'page_no': table['page_number'],
-            'block_no_from': 0,
-            'block_no_to': 0,
-            'text': flattened_text  # Append flattened table text
-        })
+        # Increment page number
+        page_no += 1
 
-    # ----------------------------
-    # Existing Logic: Merge Incomplete Blocks
-    # ----------------------------
-    rs1 = []
-    for i in range(0, len(rs)):
-        if 'text' not in rs[i]:  # Skip entries without 'text'
-            rs1.append(rs[i].copy())
-            continue
+# NEW: Extract tables and append to rs
+tables = extract_tables_from_file(file_name)
+for table in tables:
+    flattened_text = "\n".join([" | ".join(map(str, row.values())) for row in table['data']])
+    rs.append({
+        'title': table['title'],
+        'page_no': table['page_number'],
+        'block_no_from': 0,  # No block range for tables
+        'block_no_to': 0,
+        'text': flattened_text  # Flattened table data as text
+    })
 
-        if rs1 and (rs1[-1]['text'][-1:] in ['-', '_'] or rs1[-1]['text'][-2:] in ['. ', '.\n']):
-            rs1[-1]['text'] = rs1[-1]['text'][:-1] + ' ' + rs[i]['text']
-        else:
-            rs1.append(rs[i].copy())
+# Existing logic to merge incomplete blocks
+rs1 = []
+for i in range(0, len(rs)):
+    if rs1 and (rs1[-1]['text'][-1:] in ['-', '_'] or rs1[-1]['text'][-2:] in ['. ', '.\n']):
+        rs1[-1]['text'] = rs1[-1]['text'][:-1] + ' ' + rs[i]['text']
+    else:
+        rs1.append(rs[i].copy())
 
-    # ----------------------------
-    # Final Split Logic
-    # ----------------------------
-    rs2 = []
-    for i in range(0, len(rs1)):
-        if len(rs1[i]['text']) > 0:
-            rs2.append(rs1[i].copy())
-            for sentence in split_text(rs1[i]['text']):
-                temp = rs1[i].copy()
-                temp['text'] = sentence
-                rs2.append(temp)
+# Split
+rs2 = []
+for i in range(0, len(rs1)):
+    if len(rs1[i]['text']) > 0:
+        rs2.append(rs1[i].copy())
+        for sentence in split_text(rs1[i]['text']):
+            temp = rs1[i].copy()
+            temp['text'] = sentence
+            rs2.append(temp)
 
-    # Return processed chunks
-    return rs2
+company_name = Path(file_name).stem
+add_processed_index = {'company_name': company_name, 'sourceRef': f"{{item['title']}}-Page{{item['page_no']}}-span{{item['block_no_from']}}-{{item['block_no_to']}}"}
+json.dump({'processed': rs2}, open(f"{file_name}_output.json", 'w', encoding='utf-8'), indent=4)
+
+return rs2
+
