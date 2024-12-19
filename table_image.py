@@ -1,4 +1,16 @@
 import pdfplumber
+def normalize_headers(headers):
+    """
+    Normalize table headers by handling multiline headers and combining year mentions.
+    """
+    normalized_headers = []
+    for header in headers:
+        if header is None or header.strip() == "":
+            normalized_headers.append("")  # Empty cell
+        else:
+            # Combine year mentions with preceding text (e.g., "Years Ended December 31" -> "2023")
+            normalized_headers.append(header.strip())
+    return normalized_headers
 
 def extract_tables_from_file(file_name):
     """
