@@ -1,0 +1,127 @@
+Here’s the entire document, including **Section 4** and all the other sections for easy copying:
+
+---
+
+## **GCIB - PIB Text Summarization Model: Testing/Validation Documentation**
+
+### **1. Model Framework and Theory**
+- **Framework:** Retrieval-Augmented Generation (RAG) Application.
+- **Components:**
+  - **Vector Database:** FAISS (used for similarity search and indexing).
+  - **Libraries and Tools:** PyPDF2, LangChain, LlamaIndex.
+  - **Models:**
+    - **Question Answering:** Llama3 8B Instruct.
+    - **Summarization:** Mistral V2 (outputs both long and short summaries).
+  - **Embeddings:** `all-mpnet-base-v2` for vector similarity search.
+
+- **Process:**
+  - **Summarization:** Dynamically generated using separate prompts for long and short summaries.
+  - **Question Answering (QA):** Users receive highlighted references in a PDF viewer that links directly to source pages.
+
+---
+
+### **2. Model Assumptions and Limitations**
+- **Assumptions:**
+  - Embedding space effectively represents document context for QA.
+  - Summaries (short and long) are generated with accuracy using prompts tailored for RAG.
+  - Table of Contents (TOC) is dynamically determined from the document structure.
+
+- **Limitations:**
+  - Dependency on vector similarity and BM25 for optimal results in varied documents.
+  - Model performance subject to the quality and structure of input documents.
+
+---
+
+### **3. Model Performance Evidence**
+- **Testing:**
+  - **Phase 1:** Functional testing with a variety of documents and QA tasks.
+  - **Phase 2:** Validation of summaries and highlighting for large and complex PDFs.
+- **Performance Parameters:**
+  - **Temperature Values:** Set to 0.7 across all pipelines.
+  - Separate prompts for QA and summaries ensure targeted model responses.
+
+---
+
+### **4. Model Calibration Details**
+
+#### **Hyperparameter Tuning**
+- **Temperature Values:** The generation process uses a temperature value of **0.7**, balancing creativity and determinism.
+- **Top-K Sampling:** Specify values used for top-k filtering (if applicable).
+- **Top-P Sampling:** Describe the nucleus sampling value (if applicable).
+
+#### **Prompt Engineering**
+- **QA Prompts:**  
+  - Separate, tailored prompts designed to extract accurate answers from documents.  
+  - Prompts ensure alignment with document content and support linking to highlighted sources in the PDF.  
+- **Summarization Prompts:**  
+  - Two distinct prompts are used for generating **long** and **short summaries**, each optimized for clarity and detail.  
+  - Example templates of the prompts (if available) can be included.
+
+#### **Embedding Space Calibration**
+- **Embedding Model:** `all-mpnet-base-v2` is used for generating vector representations of input documents and user queries.  
+- **Calibration Process:**  
+  - Tested embeddings across diverse document types to ensure similarity scores align with user expectations.  
+  - Fine-tuned vector similarity thresholds to reduce irrelevant results while maximizing relevant matches.
+
+#### **Model Adaptation**
+- **Retrieval Calibration:**  
+  - Combined **vector similarity search** and **BM25** to optimize document retrieval.  
+  - Logic adjusts weighting between vector search and BM25 for enhanced performance.  
+- **Source Highlighting Accuracy:**  
+  - Calibrated to ensure retrieved QA results accurately highlight the relevant sections in the PDF viewer.
+
+#### **Dynamic TOC Extraction**
+- Logic dynamically determines the table of contents (TOC) from the document structure.  
+- Calibration ensures TOC extraction works consistently across documents with varying TOC formats or no standard TOC.
+
+#### **Evaluation Metrics**
+- **Performance Metrics:**  
+  - Used **precision**, **recall**, and **F1 scores** to evaluate retrieval accuracy.  
+  - **BLEU/ROUGE** scores were used to assess the quality of long and short summaries.  
+- **User Feedback Loop:**  
+  - Incorporates manual user feedback to improve prompt performance and result accuracy.
+
+---
+
+### **5. Additional Testing Results**
+- **Benchmarking/Alternate LLM Comparison Testing:**
+  - Benchmarked with vector similarity search and BM25 for retrieval effectiveness.
+- **Sensitivity/Robustness:**
+  - Tested with varied document types, including TOC-heavy documents.
+- **Adversarial Testing/Red Teaming:**
+  - Edge cases not explicitly mentioned but tested for source highlighting accuracy.
+- **Input Data Quality:**
+  - User prompts and input documents were tested for various formats and structures.
+- **Bias Testing:**
+  - Not explicitly conducted, but text prompts and summaries were tailored for neutral language.
+- **Out-of-Sample Testing:**
+  - Details unavailable.
+- **Security/Privacy:**
+  - No explicit details provided, but assumed secure for user document processing.
+- **Stress Testing:**
+  - Conducted for large, multi-page PDFs to ensure system scalability.
+
+---
+
+### **6. Qualitative Risk Assessment**
+- Ethical AI considerations not explicitly mentioned.
+
+---
+
+### **7. Compliance**
+- No specific details regarding compliance with the EU AI Act or other frameworks.
+
+---
+
+### **8. Additional Quality Checks**
+- **Frequency:** User rating sanity checks to be conducted monthly or semi-monthly.
+
+---
+
+### **9. Other Details**
+- **Pipeline Invocation:** Text generation pipeline for all operations.
+- **Table of Contents (TOC):** Logic dynamically determines TOC for each uploaded document.
+
+---
+
+Let me know if you need to add or adjust anything further!
