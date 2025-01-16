@@ -1,51 +1,65 @@
-import pandas as pd
-from datetime import datetime
+import fitz  # PyMuPDF
 
-# Example data
-data = {'Timestamp': ['01/12/24 08:30:00', '30/11/24 14:45:00', '01/12/24 18:20:00', 'InvalidDate'],
-        'User': ['John Doe, john@example.com', 'Jane Doe, jane@example.com', 'Jake Doe, jake@example.com', None],
-        'Action': ['qa', 'sum', 'qa', None]}
-df = pd.DataFrame(data)
+# Load the PDF
+pdf_path = "Apparel_2PIB.pdf"
+doc = fitz.open(pdf_path)
 
-# Step 1: Convert 'Timestamp' to datetime and drop invalid rows
-df['Timestamp'] = pd.to_datetime(df['Timestamp'], errors='coerce')  # Convert to datetime, coerce invalids to NaT
-df = df.dropna(subset=['Timestamp'])  # Drop rows with invalid 'Timestamp'
+# Extract the Table of Contents (ToC) as a list of [level, title, page]
+toc = doc.get_toc()  # Returns a list of [level, title, page]
 
-# Step 2: Remove the time element (convert to date only) while keeping as datetime64[ns]
-df['Timestamp'] = df['Timestamp'].dt.floor('d')  # Remove time component by flooring to the day
+# Build a dictionary for the first matching page number regardless of level
+toc_dict = {}
+for entry in toc:
+    page_number = entry[2]
+    if page_number > 0 and page_number not in toc_dict:  # Only keep the first entry for each page
+        toc_dict[page_number] = entry[1]  # {page_number: title}
 
-# Debug: Check processed DataFrame
-print("Processed DataFrame (after removing time):")
-print(df)
+# Extract links from the ToC page
+toc_page_number = 0  # Adjust if ToC spans multiple pages
+toc_page = doc[toc_page_number]
+links = toc_page.get_links()
 
-# Step 3: Get today's date without the time component (ensure it's datetime64[ns])
-today = pd.Timestamp(datetime.now().strftime('%Y-%m-%d'))
+# List to store matched results
+matched_results = []
+last_broker_title = None  # Keep track of the last detected "Broker" or similar title
 
-# Debug: Print today's date and its type
-print("\nToday's Date (without time):", today)
-print("Type of 'today':", type(today))
+# Iterate over links and match with ToC
+for link in links:
+    try:
+        if "page" in link and link["page"] is not None:
+            destination_page = int(link["page"]) + 1  # Convert to 1-indexed
+            # Check if the page exists in the ToC dictionary
+            if destination_page in toc_dict:
+                title = toc_dict[destination_page]
+                matched_results.append((destination_page, title))
+                # Update the last broker title
+                last_broker_title = title
+            else:
+                # No ToC match, extract text from the page and assign a fallback title
+                page = doc[destination_page - 1]  # Convert back to 0-indexed
+                page_text = page.get_text("text")
+                # Extract the first 100 characters for a quick summary
+                snippet = page_text[:100].strip()
 
-# Step 4: Filter for today's data
-df_today = df[df['Timestamp'] == today]
+                # Generate a fallback title
+                if last_broker_title:
+                    dynamic_title = f"{last_broker_title} - Supplemental Content"
+                else:
+                    dynamic_title = f"Uncategorized - Page {destination_page}"
 
-# Debug: Print filtered DataFrame
-print("\nFiltered DataFrame for Today's Date:")
-print(df_today)
+                matched_results.append((destination_page, dynamic_title))
+    except Exception as e:
+        print(f"Error processing link: {link}. Error: {e}")
 
-# Step 5: Aggregated Stats
-stats_till_date = df.groupby('Action').agg(
-    Total_Requests=('Action', 'count'),
-    Unique_Users=('User', lambda x: len(x.dropna().unique()))
-).reset_index()
+# Print the matched results
+print("Matched Results:")
+for page, title in matched_results:
+    print(f"Page {page}: {title}")
 
-stats_today = df_today.groupby('Action').agg(
-    Requests=('Action', 'count'),
-    Unique_Users=('User', lambda x: len(x.dropna().unique()))
-).reset_index()
+# Optionally, write the results to a file
+with open("matched_results.txt", "w") as output_file:
+    for page, title in matched_results:
+        output_file.write(f"Page {page}: {title}\n")
 
-# Debug: Print stats
-print("\nStats Till Date:")
-print(stats_till_date)
-
-print("\nStats for Today:")
-print(stats_today)
+# Close the document
+doc.close()
