@@ -1,61 +1,96 @@
-import easyocr
-import pandas as pd
+import fitz  # PyMuPDF
 
-def extract_text_from_pdf_with_easyocr(pdf_path, language="en"):
-    """
-    Extracts text and bounding box data from a PDF or image using EasyOCR.
-    """
-    reader = easyocr.Reader([language], gpu=False)
-    results = reader.readtext(pdf_path, detail=1)  # Extract text with bounding boxes
-    return results
+def pdf_get_toc(file_name):
+    doc = fitz.open(file_name)
+    toc = doc.get_toc(simple=True)  # Extract original ToC
+    total_pages = doc.page_count
 
-def parse_table_from_ocr_results(ocr_results):
-    """
-    Attempts to structure OCR results into a table-like format.
-    """
-    # Filter OCR results and sort by bounding box y-coordinates (top to bottom)
-    sorted_results = sorted(ocr_results, key=lambda x: x[0][0][1])
+    # Check hyperlinks on page 1 and 2
+    hyperlink_check = False
+    for page_number in [0, 1]:  # Page 1 and 2 are 0-indexed
+        page = doc[page_number]
+        links = page.get_links()
+        if len(links) > 3:  # More than 3 hyperlinks
+            hyperlink_check = True
+            break
 
-    rows = []
-    for result in sorted_results:
-        text = result[1].strip()
-        rows.append(text.split())  # Split each detected text into words
-    
-    # Attempt to create a DataFrame from detected rows
-    df = pd.DataFrame(rows)
-    return df
+    plst = []  # Initialize the output list
+    if hyperlink_check:
+        # New logic for pages with more than 3 hyperlinks
+        toc_dict = {}
+        for entry in toc:
+            pno = entry[2]
+            if pno > 0 and pno not in toc_dict:
+                toc_dict[pno] = entry[1]
 
-def explain_table(df):
-    """
-    Converts a DataFrame into a descriptive paragraph explaining the table.
-    """
-    explanation = "The table contains the following data:\n\n"
-    explanation += f"The table has {len(df)} rows and {len(df.columns)} columns. "
-    
-    for col in df.columns:
-        column_values = df[col].tolist()
-        explanation += f"Column {col + 1} contains values such as {', '.join(map(str, column_values[:3]))}, etc. "
+        section_counter = ord('A')  # Counter for unnamed sections
+        id_counter = 1
 
-    explanation += "The data is extracted from the provided PDF or image file."
-    return explanation
+        # Iterate over all pages and extract ToC information
+        for pno in range(1, total_pages + 1):  # 1-indexed pages
+            if pno in toc_dict:
+                title = toc_dict[pno]
+            else:
+                page = doc[pno - 1]  # Convert to 0-indexed
+                page_text = page.get_text("text").strip()
+                if page_text:
+                    title = page_text[:20].replace("\n", " ")
+                else:
+                    title = f"Section {chr(section_counter)}"
+                    section_counter += 1
 
-# Running everything in a Jupyter Notebook cell
-def run_ocr_pipeline(pdf_path):
-    print("Step 1: Extracting text using OCR...")
-    ocr_results = extract_text_from_pdf_with_easyocr(pdf_path)
+            # Append to plst with matching structure
+            plst.append({
+                "id": id_counter,
+                "lvl": 1,
+                "title": title,
+                "pno_from": pno,
+                "pno_to": pno,
+            })
+            id_counter += 1
+    else:
+        # Original logic for ToC
+        last_lvl = 0
+        nlvl = 0
+        ntitle = ""
+        npno_from = 0
+        npno_to = 0
+        id_counter = 1
 
-    print("Step 2: Parsing table from OCR results...")
-    table_df = parse_table_from_ocr_results(ocr_results)
-    
-    print("\nExtracted Table:")
-    display(table_df)  # Display the table inline in the notebook
+        for i, item in enumerate(toc):
+            lvl, title, pno = item
+            for j, itemj in enumerate(toc):
+                if j <= i or lvl >= 3:
+                    continue
 
-    print("\nStep 3: Generating table explanation...")
-    table_explanation = explain_table(table_df)
-    print("\nTable Explanation:")
-    print(table_explanation)
+                if i == j:
+                    nlvl = lvl
+                    ntitle = title
+                    npno_from = pno
+                    npno_to = total_pages
+                    if (id_counter + 1) == len(toc):
+                        plst.append({
+                            "id": id_counter,
+                            "lvl": nlvl,
+                            "title": ntitle,
+                            "pno_from": npno_from,
+                            "pno_to": npno_to,
+                        })
+                        id_counter += 1
+                    break
 
-# Example Usage
-# Replace 'example.pdf' with the path to your PDF or image file
-pdf_path = "example.pdf"  # Ensure this file is in the same directory or provide a full path
-run_ocr_pipeline(pdf_path)
+                if j > i:
+                    if lvl <= nlvl:
+                        # Save the record
+                        plst.append({
+                            "id": id_counter,
+                            "lvl": nlvl,
+                            "title": ntitle,
+                            "pno_from": npno_from,
+                            "pno_to": npno_to,
+                        })
+                        id_counter += 1
+                    break
+
+    doc.close()
+    return plst
