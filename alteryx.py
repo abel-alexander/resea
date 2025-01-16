@@ -21,7 +21,7 @@ links = toc_page.get_links()
 
 # List to store matched results
 matched_results = []
-last_broker_title = None  # Keep track of the last detected "Broker" or similar title
+section_counter = ord('A')  # Start naming unmatched sections as Section A, B, C, ...
 
 # Iterate over links and match with ToC
 for link in links:
@@ -31,35 +31,32 @@ for link in links:
             # Check if the page exists in the ToC dictionary
             if destination_page in toc_dict:
                 title = toc_dict[destination_page]
-                matched_results.append((destination_page, title))
-                # Update the last broker title
-                last_broker_title = title
+                matched_results.append((1, title, destination_page))  # Level 1 in ToC
             else:
-                # No ToC match, extract text from the page and assign a fallback title
+                # No ToC match, extract text from the page and generate a fallback title
                 page = doc[destination_page - 1]  # Convert back to 0-indexed
-                page_text = page.get_text("text")
-                # Extract the first 100 characters for a quick summary
-                snippet = page_text[:100].strip()
-
-                # Generate a fallback title
-                if last_broker_title:
-                    dynamic_title = f"{last_broker_title} - Supplemental Content"
+                page_text = page.get_text("text").strip()
+                if page_text:
+                    fallback_title = page_text[:20].replace("\n", " ")  # First 20 characters
                 else:
-                    dynamic_title = f"Uncategorized - Page {destination_page}"
-
-                matched_results.append((destination_page, dynamic_title))
+                    fallback_title = f"Section {chr(section_counter)}"  # Section A, B, C...
+                    section_counter += 1
+                matched_results.append((1, fallback_title, destination_page))
     except Exception as e:
         print(f"Error processing link: {link}. Error: {e}")
 
 # Print the matched results
 print("Matched Results:")
-for page, title in matched_results:
-    print(f"Page {page}: {title}")
+for level, title, page in matched_results:
+    print(f"Level {level}: {title}, Page {page}")
 
-# Optionally, write the results to a file
-with open("matched_results.txt", "w") as output_file:
-    for page, title in matched_results:
-        output_file.write(f"Page {page}: {title}\n")
+# Update the ToC in the PDF
+doc.set_toc(matched_results)
+
+# Save the updated PDF
+output_path = "Updated_" + pdf_path
+doc.save(output_path)
+print(f"\nUpdated ToC saved to {output_path}")
 
 # Close the document
 doc.close()
