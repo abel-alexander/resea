@@ -1,48 +1,47 @@
-import spacy
+import time
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+import subprocess
+import os
 
-# Load SpaCy's medium-sized pre-trained model
-nlp = spacy.load("en_core_web_md")
+# Define the file to watch and the repo directory
+repo_dir = "/path/to/your/repo"
+file_to_watch = os.path.join(repo_dir, "usage_logs.txt")
 
-# Define the range of pages for "Equity Research"
-equity_research_start = 250
-equity_research_end = 300
+class ChangeHandler(FileSystemEventHandler):
+    def on_modified(self, event):
+        if event.src_path == file_to_watch:
+            print(f"Detected changes in {file_to_watch}. Committing and pushing...")
+            try:
+                # Change to the repo directory
+                os.chdir(repo_dir)
+                
+                # Add the file to staging
+                subprocess.run(["git", "add", file_to_watch], check=True)
 
-# Define disclaimer patterns for each bank
-disclaimer_patterns = {
-    "JP Morgan": "J.P. Morgan does and seeks to do business with companies covered in its research reports",
-    "BofA Securities": "ESGMeter is not indicative of company's future",
-    "Morgan Stanley": "Morgan Stanley does and seeks to do business with companies",
-}
+                # Commit the changes
+                commit_message = "Auto-commit: Detected changes in usage_logs.txt"
+                subprocess.run(["git", "commit", "-m", commit_message], check=True)
 
-# Threshold for semantic similarity (0.85 means 85% similar)
-similarity_threshold = 0.85
+                # Push the changes
+                subprocess.run(["git", "push"], check=True)
 
-# Initialize a dictionary to store results
-bank_disclaimer_pages = {}
+                print("Changes committed and pushed successfully.")
+            except subprocess.CalledProcessError as e:
+                print(f"Error during commit/push: {e}")
 
-# Loop through the pages in the "Equity Research" section
-for doc in pages:
-    # Check if the page is within the given range
-    if equity_research_start <= doc.metadata["page"] <= equity_research_end:
-        # Preprocess the page content to handle multi-line text
-        page_content = doc.page_content.replace("\n", " ").strip()
+if __name__ == "__main__":
+    # Set up the observer
+    event_handler = ChangeHandler()
+    observer = Observer()
+    observer.schedule(event_handler, path=repo_dir, recursive=False)
 
-        # Convert the page content to a SpaCy document
-        page_doc = nlp(page_content)
+    print(f"Watching for changes in {file_to_watch}...")
+    observer.start()
 
-        # Check for each bank's disclaimer pattern in the preprocessed content
-        for bank, pattern in disclaimer_patterns.items():
-            # Convert the pattern to a SpaCy document
-            pattern_doc = nlp(pattern)
-
-            # Calculate semantic similarity
-            similarity = page_doc.similarity(pattern_doc)
-
-            # If the similarity exceeds the threshold, record the bank and page number
-            if similarity > similarity_threshold:
-                # Store the bank name and page number (only the first occurrence)
-                if bank not in bank_disclaimer_pages:
-                    bank_disclaimer_pages[bank] = doc.metadata["page"]
-
-# Print the results
-print(bank_disclaimer_pages)
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        observer.stop()
+    observer.join()
