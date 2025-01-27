@@ -1,54 +1,46 @@
-from pdf2image import convert_from_path
-from ultralytics import YOLO
 import cv2
-import os
+import numpy as np
+from ultralyticsplus import YOLO, render_result
+from PIL import Image
+import pytesseract  # OCR library
 
-# Function to convert PDF pages to images
-def pdf_to_images(pdf_path, output_folder, dpi=300):
-    # Convert PDF to images
-    images = convert_from_path(pdf_path, dpi=dpi)
-    os.makedirs(output_folder, exist_ok=True)
-    image_paths = []
+# Load the YOLO model
+model = YOLO('keremberke/yolov8m-table-extraction')
 
-    for i, page in enumerate(images):
-        image_path = os.path.join(output_folder, f"page_{i + 1}.jpg")
-        page.save(image_path, "JPEG")
-        image_paths.append(image_path)
-        print(f"Saved: {image_path}")
+# Set model parameters
+model.overrides['conf'] = 0.25  # NMS confidence threshold
+model.overrides['iou'] = 0.45  # NMS IoU threshold
+model.overrides['agnostic_nms'] = False  # NMS class-agnostic
+model.overrides['max_det'] = 1000  # maximum number of detections per image
 
-    return image_paths
+# Set the image
+image_path = 'zidane.jpg'  # Replace with your local image path
+image = cv2.imread(image_path)  # Load the image as a numpy array
 
-# Function to perform YOLOv3 table detection on images
-def detect_tables_in_images(image_paths, model_path, output_folder):
-    # Load YOLOv3 model
-    model = YOLO(model_path)
-    os.makedirs(output_folder, exist_ok=True)
+# Perform inference
+results = model.predict(image)
 
-    for image_path in image_paths:
-        # Perform inference
-        results = model.predict(image_path)
-        
-        # Save results (image with bounding boxes)
-        output_path = os.path.join(output_folder, os.path.basename(image_path))
-        for result in results:  # Loop through results (supporting multiple pages)
-            annotated_image = result.plot()
-            cv2.imwrite(output_path, annotated_image)
-            print(f"Saved detection result to: {output_path}")
-        
-        # Optionally, extract bounding boxes or save cropped tables
-        for detection in results:
-            for box in detection.boxes.xyxy:  # Bounding box coordinates
-                x1, y1, x2, y2 = map(int, box)
-                print(f"Detected Table: [{x1}, {y1}, {x2}, {y2}]")
+# Visualize results
+render = render_result(model=model, image=image, result=results[0])
+render.show()
 
-# Paths and configurations
-pdf_path = "path/to/your/input.pdf"  # Replace with the path to your PDF
-output_image_folder = "output_images"  # Folder to save images
-output_detection_folder = "output_detections"  # Folder to save detection results
-yolov3_model_path = "path/to/yolov3u.pt"  # Replace with your YOLOv3 model file
+# Extract bounding boxes and text
+for box in results[0].boxes:
+    # Get bounding box coordinates
+    xyxy = box.xyxy.cpu().numpy().astype(int)  # Convert to integers
+    x_min, y_min, x_max, y_max = xyxy[0]
 
-# Step 1: Convert PDF to images
-image_paths = pdf_to_images(pdf_path, output_image_folder)
+    # Crop the detected region
+    cropped_region = image[y_min:y_max, x_min:x_max]
 
-# Step 2: Perform YOLOv3 detection on images
-detect_tables_in_images(image_paths, yolov3_model_path, output_detection_folder)
+    # Convert to PIL Image for OCR
+    pil_image = Image.fromarray(cv2.cvtColor(cropped_region, cv2.COLOR_BGR2RGB))
+
+    # Perform OCR using pytesseract
+    extracted_text = pytesseract.image_to_string(pil_image)
+
+    # Display the extracted text
+    print(f"Bounding Box: ({x_min}, {y_min}, {x_max}, {y_max})")
+    print("Extracted Text:")
+    print(extracted_text)
+    print("-" * 50)
