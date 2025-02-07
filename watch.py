@@ -1,52 +1,61 @@
-import camelot
-import os
+import fitz  # PyMuPDF
 
-def detect_tables_in_pdf(pdf_path, output_folder=None):
-    """
-    Detects tables in a PDF file using Camelot and optionally saves them as CSVs.
-    
-    Args:
-        pdf_path (str): Path to the PDF file.
-        output_folder (str, optional): Folder to save extracted tables as CSVs. If None, tables are not saved.
-    
-    Returns:
-        tables (list): List of Camelot Table objects.
-    """
-    # Ensure the PDF file exists
-    if not os.path.exists(pdf_path):
-        raise FileNotFoundError(f"The file '{pdf_path}' does not exist.")
-    
-    print("Detecting tables in the PDF...")
-    tables = camelot.read_pdf(pdf_path, pages="all")
+def pdf_get_toc(file_name):
+    doc = fitz.open(file_name)
+    toc = doc.get_toc(simple=True)  # Extract original ToC
+    total_pages = doc.page_count
 
-    # Display table detection results
-    print(f"Detected {len(tables)} tables.")
-    for i, table in enumerate(tables):
-        print(f"Table {i + 1} summary:")
-        print(table.parsing_report)  # Show accuracy, whitespace, etc.
-    
-    # Optionally save tables to CSV
-    if output_folder:
-        os.makedirs(output_folder, exist_ok=True)
-        for i, table in enumerate(tables):
-            csv_path = os.path.join(output_folder, f"table_{i + 1}.csv")
-            table.to_csv(csv_path)
-            print(f"Table {i + 1} saved to {csv_path}")
-    
-    return tables
+    # Check hyperlinks on page 1 and 2
+    hyperlink_check = False
+    for page_number in [0, 1]:  # Page 1 and 2 are 0-indexed
+        page = doc[page_number]
+        links = page.get_links()
+        if len(links) > 3:  # More than 3 hyperlinks
+            hyperlink_check = True
+            break
 
-# Example usage
-if __name__ == "__main__":
-    # Path to the PDF file
-    pdf_path = "example.pdf"  # Replace with the path to your PDF file
-    
-    # Output folder to save detected tables as CSV files (optional)
-    output_folder = "extracted_tables"
+    plst = []  # Initialize the output list
+    if hyperlink_check:
+        # New logic for pages with more than 3 hyperlinks
+        toc_dict = {}
+        for entry in toc:
+            pno = entry[2]
+            if pno > 0 and pno not in toc_dict:
+                toc_dict[pno] = entry[1]
 
-    # Detect and extract tables
-    tables = detect_tables_in_pdf(pdf_path, output_folder)
+        section_counter = ord('A')  # Counter for unnamed sections
+        id_counter = 1
 
-    # Display the first few rows of each detected table
-    for i, table in enumerate(tables):
-        print(f"\nTable {i + 1}:")
-        print(table.df.head())  # Display the first few rows of the table
+        # Collect section data
+        section_list = []  
+        for pno in range(1, total_pages + 1):  # 1-indexed pages
+            if pno in toc_dict:
+                title = toc_dict[pno]
+            else:
+                page = doc[pno - 1]  # Convert to 0-indexed
+                page_text = page.get_text("text").strip()
+                if page_text:
+                    title = page_text[:20].replace("\n", " ")
+                else:
+                    title = f"Section {chr(section_counter)}"
+                    section_counter += 1
+            section_list.append((id_counter, 1, title, pno))  # pno_from
+            id_counter += 1
+
+        # Now fix pno_to
+        for i, (section_id, lvl, title, pno_from) in enumerate(section_list):
+            if i < len(section_list) - 1:
+                pno_to = section_list[i + 1][3] - 1  # One page before the next section
+            else:
+                pno_to = total_pages  # Last section goes till the end
+            
+            plst.append({
+                "id": section_id,
+                "lvl": lvl,
+                "title": title,
+                "pno_from": pno_from,
+                "pno_to": pno_to,
+            })
+
+    else:
+        # Original logic for ToC
