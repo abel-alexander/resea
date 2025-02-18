@@ -1,91 +1,99 @@
-from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
-from nltk.translate.meteor_score import meteor_score
-from bert_score import score as bert_score
-import re
-from nltk.stem import PorterStemmer
+import fitz  # PyMuPDF
 
-# Constants for GPU cost
-NUM_GPUS = 3  # Number of GPUs used
-GPU_COST_PER_HOUR = 3  # Cost per GPU per hour in USD
+def pdf_get_toc(file_name, max_title_length=15):
+    doc = fitz.open(file_name)
+    toc = doc.get_toc(simple=True)  # Extract original ToC
+    total_pages = doc.page_count
 
-# Preprocessing function
-def preprocess(text):
-    text = text.lower()
-    text = re.sub(r'[^\w\s]', '', text)  # Remove punctuation
-    words = text.split()
-    stemmer = PorterStemmer()
-    words = [stemmer.stem(word) for word in words]  # Stemming
-    return ' '.join(words)
+    # Extract hyperlinks from page 3 (ToC page)
+    toc_page_number = 2  # 3rd page (0-based index)
+    toc_page = doc[toc_page_number]
+    links = toc_page.get_links()
+    print(links)
 
-# Function to calculate metrics
-def calculate_metrics_with_advanced_scores(df):
-    smoothing_function = SmoothingFunction().method1  # For BLEU smoothing
-    bleu_scores = []
-    meteor_scores = []
-    bert_scores_f1 = []
-    # rouge1_scores = []  # Commented out
-    # rouge2_scores = []  # Commented out
-    # rougeL_scores = []  # Commented out
-    gpu_costs = []
+    # Collect linked pages
+    linked_pages = set()
+    for link in links:
+        if "page" in link and link["page"] is not None:
+            linked_pages.add(link["page"] + 1)  # Convert to 1-indexed
 
-    # Initialize ROUGE scorer
-    # rouge = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)  # Commented out
+    # If more than 3 hyperlinks exist, process them
+    hyperlink_check = len(linked_pages) > 3
 
-    for idx, row in df.iterrows():
-        # Reference and hypothesis
-        reference = row['Reference']
-        hypothesis = row['Llama3-v1']
+    plst = []  # Final output list
+    if hyperlink_check:
+        print("Inside hybrid ToC logic")
 
-        # Skip if hypothesis or reference is missing
-        if pd.isna(reference) or pd.isna(hypothesis):
-            bleu_scores.append(None)
-            meteor_scores.append(None)
-            bert_scores_f1.append(None)
-            # rouge1_scores.append(None)  # Commented out
-            # rouge2_scores.append(None)  # Commented out
-            # rougeL_scores.append(None)  # Commented out
-            gpu_costs.append(None)
-            continue
+        # Create a ToC lookup dictionary {page_number: title}
+        toc_dict = {entry[2]: entry[1] for entry in toc if entry[2] > 0}
 
-        # Preprocess the reference and hypothesis
-        preprocessed_reference = preprocess(reference)
-        preprocessed_hypothesis = preprocess(hypothesis)
+        section_counter = ord('A')  # For fallback sections (A, B, C, ...)
+        id_counter = 1
+        section_list = []
 
-        # BLEU Score
-        bleu = sentence_bleu(
-            [preprocessed_reference.split()], 
-            preprocessed_hypothesis.split(), 
-            smoothing_function=smoothing_function
-        )
-        bleu_scores.append(bleu)
+        # Process only hyperlinked pages
+        for pno in sorted(linked_pages):
+            if pno in toc_dict and toc_dict[pno].strip():  # If valid title exists
+                title = toc_dict[pno]
+                # ✅ Shorten long titles
+                if len(title) > max_title_length:
+                    title = title[:max_title_length] + "..."
+            else:
+                # Assign a generic unknown section instead of extracting text
+                title = f"Unknown Section {chr(section_counter)}"
+                section_counter += 1
 
-        # METEOR Score
-        meteor = meteor_score([preprocessed_reference], preprocessed_hypothesis)
-        meteor_scores.append(meteor)
+            section_list.append((id_counter, 1, title, pno))
+            id_counter += 1
 
-        # BERTScore
-        P, R, F1 = bert_score([hypothesis], [reference], lang="en", verbose=False)
-        bert_scores_f1.append(F1.mean().item())
+        print(section_list)
 
-        # ROUGE Scores (Commented out for now)
-        # rouge_scores = rouge.score(preprocessed_hypothesis, preprocessed_reference)
-        # rouge1_scores.append(rouge_scores['rouge1'].fmeasure)
-        # rouge2_scores.append(rouge_scores['rouge2'].fmeasure)
-        # rougeL_scores.append(rouge_scores['rougeL'].fmeasure)
+        # Fix `pno_to`
+        for i, (section_id, lvl, title, pno_from) in enumerate(section_list):
+            if i < len(section_list) - 1:
+                pno_to = section_list[i + 1][3] - 1  # One page before next section
+            else:
+                pno_to = total_pages  # Last section spans till the end
 
-        # GPU Cost Calculation
-        time_taken = row['time taken']  # In seconds
-        time_in_hours = time_taken / 3600  # Convert time to hours
-        gpu_cost = NUM_GPUS * time_in_hours * GPU_COST_PER_HOUR
-        gpu_costs.append(gpu_cost)
+            plst.append({
+                "id": section_id,
+                "lvl": lvl,
+                "title": title,
+                "pno_from": pno_from,
+                "pno_to": pno_to,
+            })
 
-    # Add metrics to the DataFrame
-    df['BLEU'] = bleu_scores
-    df['METEOR'] = meteor_scores
-    df['BERTScore_F1'] = bert_scores_f1
-    # df['ROUGE-1'] = rouge1_scores  # Commented out
-    # df['ROUGE-2'] = rouge2_scores  # Commented out
-    # df['ROUGE-L'] = rougeL_scores  # Commented out
-    df['GPU Cost (USD)'] = gpu_costs
+    else:
+        # Process standard ToC if hyperlinks aren't useful
+        toc_sorted = sorted(toc, key=lambda x: x[2])  # Sort by page number
+        id_counter = 1
 
-    return df
+        for i, (lvl, title, pno_from) in enumerate(toc_sorted):
+            if lvl >= 3:  # Ignore deep nested levels
+                continue
+
+            # ✅ Shorten long titles
+            if len(title) > max_title_length:
+                title = title[:max_title_length] + "..."
+
+            if i < len(toc_sorted) - 1:
+                pno_to = toc_sorted[i + 1][2] - 1
+            else:
+                pno_to = total_pages
+
+            plst.append({
+                "id": id_counter,
+                "lvl": lvl,
+                "title": title,
+                "pno_from": pno_from,
+                "pno_to": pno_to,
+            })
+            id_counter += 1
+
+    doc.close()
+
+    # Print the extracted Table of Contents
+    for entry in plst:
+        print(entry)
+
+    return plst  # Return the structured ToC as a list of dictionaries
