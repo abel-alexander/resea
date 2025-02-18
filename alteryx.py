@@ -1,15 +1,35 @@
+import streamlit as st
 import fitz  # PyMuPDF
 
-def pdf_recreate_toc(file_name):
-    doc = fitz.open(file_name)
-    first_page = doc[0]  # Extract from the first page
-    links = first_page.get_links()
-    text_blocks = first_page.get_text("blocks")  # Extract text blocks
-
-    plst = []  # Final output list
-    unique_entries = set()  # Prevent duplicate entries
-    section_counter = ord('A')  # For unknown sections
+def extract_hyperlinked_toc(doc):
+    """
+    Extracts a Table of Contents (ToC) from a PDF by detecting hyperlinks and their associated text.
+    Uses bounding box detection and falls back on get_toc() if necessary.
+    """
+    plst = []  # Final structured output
+    unique_entries = set()  # To prevent duplicates
+    section_counter = ord('A')  # Counter for unknown sections
     id_counter = 1
+
+    # Check pages 1 → 2 → 3 for more than 3 hyperlinks
+    selected_page = None
+    for page_num in range(3):
+        page = doc[page_num]
+        links = page.get_links()
+        if len(links) > 3:
+            selected_page = page_num
+            break
+
+    if selected_page is None:
+        st.warning("No page with more than 3 hyperlinks found. No ToC generated.")
+        return []
+
+    st.success(f"Using Page {selected_page + 1} for ToC extraction.")
+
+    # Extract text blocks from the selected page
+    selected_page_obj = doc[selected_page]
+    links = selected_page_obj.get_links()
+    text_blocks = selected_page_obj.get_text("blocks")
 
     # Extract inbuilt ToC as a fallback
     toc_dict = {entry[2]: entry[1] for entry in doc.get_toc(simple=True) if entry[2] > 0}
@@ -37,8 +57,12 @@ def pdf_recreate_toc(file_name):
 
         # Use inbuilt ToC as a fallback if no matched text found
         if not matched_text:
-            matched_text = toc_dict.get(destination_page, f"Unknown Section {chr(section_counter)}")
-            section_counter += 1 if "Unknown Section" in matched_text else 0
+            if destination_page not in toc_dict:
+                matched_text = f"Unknown Section {destination_page}"
+            else:
+                matched_text = toc_dict[destination_page]  # Use existing ToC title if found
+            # matched_text = toc_dict.get(destination_page, f"Unknown Section {chr(section_counter)}")
+            # section_counter += 1 if "Unknown Section" in matched_text else 0
 
         # Avoid duplicates
         entry_key = (matched_text, destination_page)
@@ -56,17 +80,46 @@ def pdf_recreate_toc(file_name):
         })
         id_counter += 1
 
-    # Adjust `pno_to` correctly
-    for i in range(len(plst)):
-        if i < len(plst) - 1:
-            plst[i]["pno_to"] = plst[i + 1]["pno_from"] - 1
-        else:
-            plst[i]["pno_to"] = doc.page_count  # Last section spans till the end
+    # Ensure `pno_to` follows hyperlink order
+    plst = sorted(plst, key=lambda x: x["pno_from"])  # Sort in order of pno_from
 
-    doc.close()
+    for i in range(len(plst) - 1):
+        plst[i]["pno_to"] = plst[i + 1]["pno_from"] - 1  # Assign next section's start - 1
 
-    # Print structured ToC
-    for entry in plst:
-        print(entry)
+    # Ensure the last section spans till the last page
+    if plst:
+        plst[-1]["pno_to"] = doc.page_count
 
     return plst
+
+# Streamlit UI
+st.title("PDF Table of Contents Extractor (Editable Dropdown)")
+
+uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
+
+if uploaded_file is not None:
+    with fitz.open(stream=uploaded_file.read(), filetype="pdf") as doc:
+        toc = extract_hyperlinked_toc(doc)
+
+        if toc:
+            st.subheader("Extracted Table of Contents")
+
+            # Store editable ToC in session state
+            if "edited_toc" not in st.session_state:
+                st.session_state.edited_toc = {entry["id"]: entry["title"] for entry in toc}
+
+            # Single dropdown with editable fields
+            with st.expander("Edit Table of Contents"):
+                for entry in toc:
+                    new_title = st.text_input(
+                        f"Edit title for Page {entry['pno_from']} - {entry['pno_to']}:",
+                        value=st.session_state.edited_toc[entry["id"]],
+                        key=f"title_{entry['id']}"
+                    )
+                    st.session_state.edited_toc[entry["id"]] = new_title  # Save changes dynamically
+
+            # Display the updated ToC
+            st.subheader("Updated Table of Contents")
+            for entry in toc:
+                edited_title = st.session_state.edited_toc[entry["id"]]
+                st.write(f"**{edited_title}** (Page {entry['pno_from']}-{entry['pno_to']})")
