@@ -1,62 +1,72 @@
 import fitz  # PyMuPDF
 
-# Load the PDF
-pdf_path = "Apparel_2PIB.pdf"
-doc = fitz.open(pdf_path)
+def pdf_recreate_toc(file_name):
+    doc = fitz.open(file_name)
+    first_page = doc[0]  # Extract from the first page
+    links = first_page.get_links()
+    text_blocks = first_page.get_text("blocks")  # Extract text blocks
 
-# Extract the Table of Contents (ToC) as a list of [level, title, page]
-toc = doc.get_toc()  # Returns a list of [level, title, page]
+    plst = []  # Final output list
+    unique_entries = set()  # Prevent duplicate entries
+    section_counter = ord('A')  # For unknown sections
+    id_counter = 1
 
-# Build a dictionary for the first matching page number regardless of level
-toc_dict = {}
-for entry in toc:
-    page_number = entry[2]
-    if page_number > 0 and page_number not in toc_dict:  # Only keep the first entry for each page
-        toc_dict[page_number] = entry[1]  # {page_number: title}
+    # Extract inbuilt ToC as a fallback
+    toc_dict = {entry[2]: entry[1] for entry in doc.get_toc(simple=True) if entry[2] > 0}
 
-# Extract links from the ToC page
-toc_page_number = 0  # Adjust if ToC spans multiple pages
-toc_page = doc[toc_page_number]
-links = toc_page.get_links()
+    for link in links:
+        if "page" in link and isinstance(link["page"], int):
+            destination_page = link["page"] + 1  # Convert to 1-indexed
+        else:
+            continue  # Skip invalid links
 
-# List to store matched results
-matched_results = []
-section_counter = ord('A')  # Start naming unmatched sections as Section A, B, C, ...
+        link_rect = fitz.Rect(link["from"])  # Hyperlink bounding box
+        expanded_rect = link_rect + (-5, -2, 5, 2)  # Expand for better text capture
 
-# Iterate over links and match with ToC
-for link in links:
-    try:
-        if "page" in link and link["page"] is not None:
-            destination_page = int(link["page"]) + 1  # Convert to 1-indexed
-            # Check if the page exists in the ToC dictionary
-            if destination_page in toc_dict:
-                title = toc_dict[destination_page]
-                matched_results.append((1, title, destination_page))  # Level 1 in ToC
-            else:
-                # No ToC match, extract text from the page and generate a fallback title
-                page = doc[destination_page - 1]  # Convert back to 0-indexed
-                page_text = page.get_text("text").strip()
-                if page_text:
-                    fallback_title = page_text[:20].replace("\n", " ")  # First 20 characters
-                else:
-                    fallback_title = f"Section {chr(section_counter)}"  # Section A, B, C...
-                    section_counter += 1
-                matched_results.append((1, fallback_title, destination_page))
-    except Exception as e:
-        print(f"Error processing link: {link}. Error: {e}")
+        matched_text = None
+        min_distance = float("inf")
 
-# Print the matched results
-print("Matched Results:")
-for level, title, page in matched_results:
-    print(f"Level {level}: {title}, Page {page}")
+        # Find the closest text block overlapping the link
+        for block in text_blocks:
+            text_rect = fitz.Rect(block[:4])
+            if expanded_rect.intersects(text_rect):
+                distance = abs(link_rect.y0 - text_rect.y0)
+                if distance < min_distance:
+                    matched_text = block[4].strip()
+                    min_distance = distance
 
-# Update the ToC in the PDF
-doc.set_toc(matched_results)
+        # Use inbuilt ToC as a fallback if no matched text found
+        if not matched_text:
+            matched_text = toc_dict.get(destination_page, f"Unknown Section {chr(section_counter)}")
+            section_counter += 1 if "Unknown Section" in matched_text else 0
 
-# Save the updated PDF
-output_path = "Updated_" + pdf_path
-doc.save(output_path)
-print(f"\nUpdated ToC saved to {output_path}")
+        # Avoid duplicates
+        entry_key = (matched_text, destination_page)
+        if entry_key in unique_entries:
+            continue
+        unique_entries.add(entry_key)
 
-# Close the document
-doc.close()
+        # Append to plst
+        plst.append({
+            "id": id_counter,
+            "lvl": 1,
+            "title": matched_text,
+            "pno_from": destination_page,
+            "pno_to": destination_page  # Will adjust later
+        })
+        id_counter += 1
+
+    # Adjust `pno_to` correctly
+    for i in range(len(plst)):
+        if i < len(plst) - 1:
+            plst[i]["pno_to"] = plst[i + 1]["pno_from"] - 1
+        else:
+            plst[i]["pno_to"] = doc.page_count  # Last section spans till the end
+
+    doc.close()
+
+    # Print structured ToC
+    for entry in plst:
+        print(entry)
+
+    return plst
