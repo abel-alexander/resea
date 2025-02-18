@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit as sts
 import fitz  # PyMuPDF
 
 def extract_hyperlinked_toc(doc):
