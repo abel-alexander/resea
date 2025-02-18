@@ -1,81 +1,72 @@
-def get_chunks(file_name):
-    tocs = pdf_get_toc(file_name)
-    tocs.sort(key=lambda x: x['id'], reverse=True)
-    rs = []
-    
-    with fitz.open(file_name) as doc:
-        doctitle = doc.metadata['title']
-        page_no = 0
-    
-        while page_no < len(doc):
-            title, lvl = pdf_toc.get_title_from_page_no(tocs, page_no + 1)
-            if lvl == 2 and pdf_toc.is_page_dnd(page):
-                print(f"skip page: {page_no+1} onwards")
-                while page_no + 1 < len(doc):
-                    page_no = page_no + 1
-                    new_title, new_lvl = pdf_toc.get_title_from_page_no(tocs, page_no + 1)
-                    if new_title == title:
-                        # Change of title
-                        if title == 'Deutsche Bank':
-                            # Processing the last page
-                            page_no = page_no + 1
-                        page_no = doc[page_no]
-                        break
-                print(f"skip resume page: {page_no+1}")
-            blks = pdf_toc.get_page_blocks(page)
-            for blk in blks:
-                blk_text = pdf_toc.post_process_text(blk[4])
-                if len(blk_text) > 0:
-                    rs.append({
-                        'title': title,
-                        'page_no': page_no + 1,
-                        'block_no_from': blk[5],
-                        'block_no_to': blk[5],
-                        'text': blk_text
-                    })
-    
-            # Increment page number
-            page_no += 1
+import fitz  # PyMuPDF
 
-    # NEW: Extract tables and append to rs
-    tables = extract_tables_from_file(file_name)  # Extract tables as JSON
-    for table in tables:
-        flattened_text = "\n".join([" | ".join(map(str, row.values())) for row in table['data']])
-        rs.append({
-            'title': table['title'],
-            'page_no': table['page_number'],
-            'block_no_from': 0,  # No block range for tables
-            'block_no_to': 0,
-            'text': flattened_text  # Flattened table data as text
+def pdf_get_toc_with_links(file_name):
+    doc = fitz.open(file_name)
+    toc_page_number = 2  # 3rd page (0-based index)
+    toc_page = doc[toc_page_number]
+
+    # Extract hyperlinks and text blocks from the ToC page
+    links = toc_page.get_links()
+    text_blocks = toc_page.get_text("blocks")
+
+    plst = []  # Final output list
+    unique_entries = set()  # To prevent duplicates
+
+    section_counter = ord('A')  # Counter for unknown sections
+    id_counter = 1
+
+    for link in links:
+        link_rect = fitz.Rect(link["from"])  # Get the hyperlink bounding box
+        destination_page = link["page"] + 1  # Convert to 1-indexed
+
+        # Expand bounding box slightly to capture surrounding text
+        expanded_rect = link_rect + (-5, -2, 5, 2)
+
+        matched_text = None
+        min_distance = float("inf")
+
+        # Iterate over text blocks to find the closest match
+        for block in text_blocks:
+            text_rect = fitz.Rect(block[:4])  # Get text bounding box
+            if expanded_rect.intersects(text_rect):  # Check if expanded box intersects
+                # Select the closest text block
+                distance = abs(link_rect.y0 - text_rect.y0)
+                if distance < min_distance:
+                    matched_text = block[4].strip()
+                    min_distance = distance
+
+        # Assign a fallback name if no match is found
+        if not matched_text:
+            matched_text = f"Unknown Section {chr(section_counter)}"
+            section_counter += 1
+
+        # Avoid duplicates
+        entry_key = (matched_text, destination_page)
+        if entry_key in unique_entries:
+            continue  # Skip duplicate entries
+        unique_entries.add(entry_key)
+
+        # Append result in plst format
+        plst.append({
+            "id": id_counter,
+            "lvl": 1,
+            "title": matched_text,
+            "pno_from": destination_page,
+            "pno_to": destination_page  # We will adjust this later
         })
-    
-    # Handle incomplete blocks
-    rs1 = []
-    for i in range(0, len(rs)):
-        if i == 0:
-            rs1.append(rs[i].copy())
-        elif rs1[len(rs1)-1]['text'][-2:] == "-\n" or rs1[len(rs1)-1]['text'][-2:] == "\n":
-            rs1[len(rs1)-1]['text'] = rs1[len(rs1)-1]['text'][:-1] + rs[i]['text']
-            rs1[len(rs1)-1]['block_no_to'] = rs[i]['block_no_to']
-        elif len(rs1[len(rs1)-1]['text']) < 200:
-            rs1[len(rs1)-1]['text'] += rs[i]['text']
-            rs1[len(rs1)-1]['block_no_to'] = rs[i]['block_no_to']
+        id_counter += 1
+
+    # Fix pno_to to correctly span across pages
+    for i in range(len(plst)):
+        if i < len(plst) - 1:
+            plst[i]["pno_to"] = plst[i + 1]["pno_from"] - 1
         else:
-            rs1.append(rs[i].copy())
-    
-    # Split into smaller chunks
-    rs2 = []
-    for i in range(0, len(rs1)):
-        if i == 0:
-            rs2.append(rs1[i].copy())
-        else:
-            for sentence in split_text(rs1[i]['text']):
-                temp = rs1[i].copy()
-                temp['text'] = sentence
-                rs2.append(temp)
-    
-    # Add document metadata
-    company_name = Path(file_name).stem
-    for item in rs2:
-        item['text'] = f"\n---\ncompany name: '{company_name} '\nSourceRef:'{item['title']}-Page: {item['page_no']}-ispn-{item['page_no']}-{item['block_no_from']}-{item['block_no_to']}-ispn'\ntext:\n{item['text']}\n---\n"
-    return rs2
+            plst[i]["pno_to"] = doc.page_count  # Last entry spans till the end
+
+    doc.close()
+
+    # Print the final structured ToC
+    for entry in plst:
+        print(entry)
+
+    return plst
