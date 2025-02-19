@@ -16,20 +16,6 @@ if uploaded_file is not None:
             if "edited_toc" not in st.session_state:
                 st.session_state.edited_toc = {entry["id"]: entry["title"] for entry in toc}
 
-            # ✅ Store dropdown options in session state if not already set
-            if "dropdown_options" not in st.session_state:
-                st.session_state.dropdown_options = [
-                    (entry["id"], entry["title"], entry["pno_from"], entry["pno_to"]) for entry in toc
-                ]
-
-            # ✅ Dropdown showing section names with page numbers initially
-            selected_section = st.selectbox(
-                "Select a section:",
-                options=st.session_state.dropdown_options,
-                format_func=lambda x: f"{x[1]} (Page {x[2]}-{x[3]})"
-                if x[1] == st.session_state.edited_toc[x[0]] else x[1]  # Remove page numbers for edited sections
-            )
-
             # ✅ Expander for editing all sections
             with st.expander("Edit Table of Contents"):
                 for entry in toc:
@@ -45,11 +31,16 @@ if uploaded_file is not None:
                 for entry in toc:
                     entry["title"] = st.session_state.edited_toc[entry["id"]]
 
-                # ✅ Update dropdown to reflect edits (remove page numbers for edited items)
-                st.session_state.dropdown_options = [
-                    (entry["id"], entry["title"], entry["pno_from"], entry["pno_to"]) for entry in toc
-                ]
+                # ✅ Update dropdown options with edited titles (no page numbers)
+                st.session_state.dropdown_options = [entry["title"] for entry in toc]
                 st.success("ToC has been updated!")
+
+            # ✅ Dropdown below the button, showing only section names after edits
+            if "dropdown_options" in st.session_state:
+                selected_section = st.selectbox(
+                    "Updated Sections:",
+                    options=st.session_state.dropdown_options
+                )
 
             # ✅ Display the updated ToC
             st.subheader("Updated Table of Contents")
