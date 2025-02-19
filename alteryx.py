@@ -83,6 +83,11 @@ def extract_hyperlinked_toc(doc):
     if plst:
         plst[-1]["pno_to"] = doc.page_count
 
+    # ✅ Update "Unknown Section" with correct `pno_to`
+    for entry in plst:
+        if "Unknown Section" in entry["title"]:
+            entry["title"] = f"Unknown Section from page: {entry['pno_from']} to page: {entry['pno_to']}"
+
     return plst
 
 # Streamlit UI
@@ -101,17 +106,31 @@ if uploaded_file is not None:
             if "edited_toc" not in st.session_state:
                 st.session_state.edited_toc = {entry["id"]: entry["title"] for entry in toc}
 
-            # Dropdown with editable fields
-            with st.expander("Edit Table of Contents"):
-                for entry in toc:
-                    new_title = st.text_input(
-                        f"Edit title for Page {entry['pno_from']} - {entry['pno_to']}:",
-                        value=st.session_state.edited_toc[entry["id"]],
-                        key=f"title_{entry['id']}"
-                    )
-                    st.session_state.edited_toc[entry["id"]] = new_title  # Save changes dynamically
+            # ✅ Display ToC items in a dropdown list
+            selected_section = st.selectbox(
+                "Select a section to edit:",
+                options=[(entry["id"], entry["title"]) for entry in toc],
+                format_func=lambda x: f"{x[1]} (Page {toc[x[0] - 1]['pno_from']}-{toc[x[0] - 1]['pno_to']})"
+            )
 
-            # Display the updated ToC
+            # ✅ Text input for editing
+            selected_id, current_title = selected_section
+            new_title = st.text_input(
+                f"Edit title for Page {toc[selected_id - 1]['pno_from']} - {toc[selected_id - 1]['pno_to']}:",
+                value=current_title,
+                key=f"title_{selected_id}"
+            )
+
+            # ✅ Update session state with new title
+            st.session_state.edited_toc[selected_id] = new_title
+
+            # ✅ Button to "Set ToC" after editing
+            if st.button("Set ToC"):
+                for entry in toc:
+                    entry["title"] = st.session_state.edited_toc[entry["id"]]
+                st.success("ToC has been updated!")
+
+            # ✅ Display the updated ToC
             st.subheader("Updated Table of Contents")
             for entry in toc:
                 edited_title = st.session_state.edited_toc[entry["id"]]
