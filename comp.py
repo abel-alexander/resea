@@ -16,11 +16,11 @@ if uploaded_file is not None:
             if "edited_toc" not in st.session_state:
                 st.session_state.edited_toc = {entry["id"]: entry["title"] for entry in toc}
 
-            # ✅ Dropdown showing section names with page numbers
+            # ✅ Dropdown showing section names with page numbers initially
             selected_section = st.selectbox(
                 "Select a section:",
                 options=[(entry["id"], entry["title"], entry["pno_from"], entry["pno_to"]) for entry in toc],
-                format_func=lambda x: f"{x[1]} (Page {x[2]}-{x[3]})"
+                format_func=lambda x: f"{st.session_state.edited_toc[x[0]]} (Page {x[2]}-{x[3]})"
             )
 
             # ✅ Expander for editing all sections
@@ -40,14 +40,14 @@ if uploaded_file is not None:
 
                 # ✅ Update dropdown to reflect edits (remove page numbers for edited items)
                 st.session_state.dropdown_options = [
-                    (entry["id"], entry["title"]) for entry in toc
+                    (entry["id"], entry["title"], entry["pno_from"], entry["pno_to"]) for entry in toc
                 ]
                 st.success("ToC has been updated!")
 
             # ✅ Updated Dropdown after edits (removes page numbers for edited sections)
-            updated_selected_section = st.selectbox(
+            selected_section = st.selectbox(
                 "Updated Sections:",
-                options=st.session_state.dropdown_options if "dropdown_options" in st.session_state else [],
+                options=st.session_state.dropdown_options,
                 format_func=lambda x: x[1]  # Show only title (no page numbers after edits)
             )
 
