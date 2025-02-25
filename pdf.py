@@ -1,6 +1,12 @@
 # Ensure session state stores the edited ToC
 if "edited_toc" not in st.session_state:
-    st.session_state.edited_toc = {entry[2]: entry[1] for entry in st.session_state.pdf_toc}
+    # Ensure pdf_toc has valid structure before initializing edited_toc
+    if isinstance(st.session_state.pdf_toc, list) and all(isinstance(entry, (list, tuple)) and len(entry) >= 3 for entry in st.session_state.pdf_toc):
+        st.session_state.edited_toc = {entry[2]: entry[1] for entry in st.session_state.pdf_toc}
+    else:
+        st.session_state.edited_toc = {}  # Initialize as empty if structure is incorrect
+        st.error("Error: `pdf_toc` does not have the expected structure [level, title, page_no].")
+
 
 st.subheader("✏️ Edit Section Titles")
 
