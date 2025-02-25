@@ -1,29 +1,24 @@
-# Ensure pdf_toc is stored in session state
-if "pdf_toc" not in st.session_state:
-    st.session_state.pdf_toc = pdf_toc  # Assuming pdf_toc is already extracted
+# Ensure session state stores the edited ToC
+if "edited_toc" not in st.session_state:
+    st.session_state.edited_toc = {entry[2]: entry[1] for entry in st.session_state.pdf_toc}
 
-# Ensure edited titles storage
-if "edited_titles" not in st.session_state:
-    st.session_state.edited_titles = {}  # Dictionary to store edits
+st.subheader("✏️ Edit Section Titles")
 
-# Collapsible section for editing TOC
-with st.expander("Edit Table of Contents"):
-    selected_section = st.selectbox(
-        "Select a section to edit:",
-        options=[(idx, entry[1], entry[2]) for idx, entry in enumerate(st.session_state.pdf_toc)],  
-        format_func=lambda x: f"{x[1]} (Page {x[2]})"
-    )
+# Select a section to edit
+selected_section = st.selectbox(
+    "Select a section to rename:",
+    options=[st.session_state.edited_toc[entry[2]] for entry in st.session_state.pdf_toc],
+    index=None,
+    key="selected_section_editor"
+)
 
-    # Extract index and current title
-    selected_idx, current_title, page_number = selected_section
+# Find the corresponding page number
+selected_page_no = next(entry[2] for entry in st.session_state.pdf_toc if st.session_state.edited_toc[entry[2]] == selected_section)
 
-    # Editable text input for section title
-    new_title = st.text_input("Edit Section Name:", value=current_title)
+# Editable text input for renaming the selected section
+new_title = st.text_input("Edit section name:", value=selected_section, key="edit_section_title")
 
-    # Update the edited title in session state
-    if new_title and new_title != current_title:
-        st.session_state.edited_titles[selected_idx] = new_title
-
-# Ensure get_name_for_selectbox picks up the edited names
-def get_name_for_selectbox():
-    return st.session_state.edited_titles.get(selected_idx, st.session_state.pdf_toc[selected_idx][1])  
+# Update section name and refresh UI when the button is clicked
+if st.button("✅ Update Section Name"):
+    st.session_state.edited_toc[selected_page_no] = new_title
+    st.rerun()  # Instantly refresh dropdowns with the updated name
