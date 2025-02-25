@@ -4,38 +4,51 @@ import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 
+# Ensure necessary NLTK resources are downloaded
 nltk.download('stopwords')
 nltk.download('punkt')
 
-def keyword_frequency(texts, special_phrases, keywords_to_remove):
-    # Initialize counter object to hold the frequencies for unigrams
+def keyword_frequency(text, special_phrases=None, keywords_to_remove=None, top_n=10):
+    # Initialize counter
     unigram_freq_counter = Counter()
 
-    # Get the English Stopwords list
-    pre_stop_words = set(stopwords.words("english"))
-    stop_words = pre_stop_words.union({word for phrase in special_phrases for word in phrase.lower().split()})
+    # Ensure default values for optional parameters
+    if special_phrases is None:
+        special_phrases = []
+    if keywords_to_remove is None:
+        keywords_to_remove = set()
 
-    for text in texts:
-        # Convert to lowercase
-        text = str(text).lower()
+    # Convert special phrases into underscore-separated versions
+    special_phrases_dict = {phrase.lower(): "_".join(phrase.lower().split()) for phrase in special_phrases}
 
-        # Normalize special phrases
-        for phrase in special_phrases:
-            text = text.replace(phrase.lower(), "_".join(phrase.lower().split()))
+    # Convert text to lowercase
+    text = text.lower()
 
-        # Tokenize text into words
-        words = word_tokenize(text)
+    # Replace special phrases with underscore versions
+    for phrase, replacement in special_phrases_dict.items():
+        text = text.replace(phrase, replacement)
 
-        # Remove stopwords, non-alphabetic words, and unwanted keywords
-        filtered_unigrams = [w for w in words if w.isalpha() and w not in stop_words and w not in keywords_to_remove]
+    # Tokenize text correctly into words
+    words = word_tokenize(text)
 
-        # Update frequency counter
-        unigram_freq_counter.update(filtered_unigrams)
+    # Remove stopwords and unwanted words
+    stop_words = set(stopwords.words("english"))
+    filtered_words = [w for w in words if w.isalpha() and w not in stop_words and w not in keywords_to_remove]
 
-    # Convert to DataFrame and get the top 10 keywords
+    # Update frequency counter
+    unigram_freq_counter.update(filtered_words)
+
+    # Convert to DataFrame and get the top N keywords
     unigram_df = pd.DataFrame(unigram_freq_counter.items(), columns=['Keyword', 'Frequency']).sort_values(
         by='Frequency', ascending=False
     )
 
-    # Return top 10 keywords as an array
-    return unigram_df['Keyword'].head(10).tolist()
+    return unigram_df['Keyword'].head(top_n).tolist()  # Return top N keywords as an array
+
+# Example Usage
+text = "This is a sample text for keyword extraction. Keyword analysis is important in machine learning!"
+special_phrases = ["keyword extraction", "machine learning"]
+keywords_to_remove = {"is", "a", "in"}
+
+top_10_keywords = keyword_frequency(text, special_phrases, keywords_to_remove)
+print(top_10_keywords)
