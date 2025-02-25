@@ -1,32 +1,34 @@
-# Ensure session state stores edited section names
-if "edited_long_toc" not in st.session_state:
-    st.session_state.edited_long_toc = {
-        entry[2]: entry[1] for entry in st.session_state.pdf_long_section_names
+st.subheader("📄 PDF Table of Contents (Editable)")
+
+# Ensure session state stores the editable ToC
+if "edited_toc" not in st.session_state:
+    st.session_state.edited_toc = {
+        entry[2]: entry[1] for entry in st.session_state.pdf_toc
     }
 
-# Collapsible editor for modifying section titles
-with st.expander("📝 Edit Section Titles", expanded=False):
-    for entry in st.session_state.pdf_long_section_names:
+# Step 1: Display and allow edits
+with st.expander("📝 Edit ToC Before Using Dropdown", expanded=True):
+    for entry in st.session_state.pdf_toc:
         page_no = entry[2]
-        section_title = st.session_state.edited_long_toc.get(page_no, entry[1])
+        section_title = st.session_state.edited_toc.get(page_no, entry[1])
 
-        # Inline editable text input for each section
-        new_title = st.text_input(f"Page {page_no}:", value=section_title, key=f"edit_long_{page_no}")
+        # Inline text input for each section
+        new_title = st.text_input(f"Page {page_no}:", value=section_title, key=f"edit_toc_{page_no}")
 
-        # Update session state on edit
-        st.session_state.edited_long_toc[page_no] = new_title  
+        # Update session state with new titles
+        st.session_state.edited_toc[page_no] = new_title  
 
-    # Save changes and refresh dropdown dynamically
-    if st.button("✅ Save Changes"):
-        st.success("Section names updated!")
-        st.rerun()  # Refresh UI to reflect updated names in dropdown
+    # Step 2: Save changes and confirm before passing to dropdown
+    if st.button("✅ Save ToC Changes"):
+        st.success("ToC updated successfully! Proceeding to dropdown.")
+        st.session_state.final_toc = list(st.session_state.edited_toc.values())  # Store final version
 
-# 🔹 Existing dropdown remains unchanged, but now uses updated names
-st.selectbox(
-    "Generate a detailed summary",
-    options=[st.session_state.edited_long_toc[entry[2]] for entry in st.session_state.pdf_long_section_names],
-    index=None,
-    key="long_section_name",
-    placeholder="...",
-    on_change=select_long_section_name  # Existing function remains intact
-)
+# Step 3: Display the dropdown only after editing is done
+if "final_toc" in st.session_state:
+    st.subheader("📌 Select Section from Updated ToC")
+    selected_section = st.selectbox(
+        "Choose a section:",
+        options=st.session_state.final_toc,
+        index=None,
+        key="selected_section"
+    )
