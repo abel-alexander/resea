@@ -1,55 +1,41 @@
-# Define the specific section keywords to look for
-section_keywords = ["Earnings Release", "Earnings Call", "10-K", "Equity Research", "Recent News"]
+from collections import Counter
+import pandas as pd
+import nltk
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
 
-# Initialize an empty dictionary to store results
-sections = {}
+nltk.download('stopwords')
+nltk.download('punkt')
 
-# Loop through the `pages` list of Document objects
-for doc in pages:
-    # Loop through the known section keywords
-    for keyword in section_keywords:
-        # Look for the pattern "{section}Public Information" in the page content
-        search_pattern = f"{keyword}Public Information"
-        if search_pattern in doc.page_content:
-            # Ignore page 0 and store the result
-            if doc.metadata["page"] > 0:
-                sections[search_pattern] = doc.metadata["page"]
+def keyword_frequency(texts, special_phrases, keywords_to_remove):
+    # Initialize counter object to hold the frequencies for unigrams
+    unigram_freq_counter = Counter()
 
-# Print the dictionary
-print(sections)
+    # Get the English Stopwords list
+    pre_stop_words = set(stopwords.words("english"))
+    stop_words = pre_stop_words.union({word for phrase in special_phrases for word in phrase.lower().split()})
 
+    for text in texts:
+        # Convert to lowercase
+        text = str(text).lower()
 
+        # Normalize special phrases
+        for phrase in special_phrases:
+            text = text.replace(phrase.lower(), "_".join(phrase.lower().split()))
 
-import fitz  # PyMuPDF
-from PIL import Image
-import io
+        # Tokenize text into words
+        words = word_tokenize(text)
 
-# Define the PDF file and the page range
-pdf_path = "palantir.pdf"
-start_page = 250  # Starting page
-end_page = 300    # Ending page
+        # Remove stopwords, non-alphabetic words, and unwanted keywords
+        filtered_unigrams = [w for w in words if w.isalpha() and w not in stop_words and w not in keywords_to_remove]
 
-# Output directory for the images
-output_dir = "./extracted_images/"
+        # Update frequency counter
+        unigram_freq_counter.update(filtered_unigrams)
 
-# Open the PDF file
-doc = fitz.open(pdf_path)
+    # Convert to DataFrame and get the top 10 keywords
+    unigram_df = pd.DataFrame(unigram_freq_counter.items(), columns=['Keyword', 'Frequency']).sort_values(
+        by='Frequency', ascending=False
+    )
 
-# Loop through the specified page range
-for page_num in range(start_page - 1, end_page):  # PyMuPDF uses 0-based indexing
-    page = doc.load_page(page_num)
-    images = page.get_images(full=True)  # Get all images on the page
-
-    for i, img in enumerate(images):
-        xref = img[0]  # Reference to the image object
-        base_image = doc.extract_image(xref)  # Extract the image
-        image_bytes = base_image["image"]  # Get the image data as bytes
-        image_ext = base_image["ext"]  # Get the image format (e.g., png, jpeg)
-
-        # Create an image from the bytes
-        image = Image.open(io.BytesIO(image_bytes))
-        
-        # Save the image
-        image.save(f"{output_dir}page_{page_num + 1}_image_{i + 1}.{image_ext}")
-
-print("Image extraction completed.")
+    # Return top 10 keywords as an array
+    return unigram_df['Keyword'].head(10).tolist()
