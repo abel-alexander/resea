@@ -1,71 +1,41 @@
-import pandas as pd
-import re
+def extract_inference_lines_with_timestamp(log_file_path):
+    inference_data = []
 
-# Input and output file paths
-input_file_path = "usagelog.txt"
-output_file_path = "qa_extracted.xlsx"
+    # Define unwanted names (case insensitive)
+    unwanted_names = {"kenny", "anita", "abel", "richa"}
 
-# Function to extract email, questions, and answers
-def parse_log_entries(log_lines):
-    parsed_logs = []
-    email, question = None, None
-    answer_parts = []
-    capturing_answer = False
-    total_questions = 0
-    total_answers = 0
+    # Timestamp pattern (YYYY-MM-DD HH:MM:SS,XXX)
+    timestamp_pattern = re.compile(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})')
 
-    for line in log_lines:
-        line = line.strip()
+    # Email and inference pattern
+    inference_pattern = re.compile(r'([\w\.-]+@[\w\.-]+).*?inference:result:\s*(.+)', re.IGNORECASE)
 
-        # ✅ Extract Email and Question (qa: but NOT qa:result)
-        match = re.match(r".*?([\w\.\+\-]+@[a-zA-Z0-9\.-]+\.[a-zA-Z]{2,}),\s*qa:(?!result:)(.*)", line)
-        if match:
-            email, question = match.groups()
-            total_questions += 1
-            continue  
+    with open(log_file_path, 'r', encoding='utf-8') as file:
+        for line in file:
+            line = line.strip()
 
-        # ✅ Detect start of answer (qa:result)
-        elif "qa:result" in line:
-            capturing_answer = True
-            answer_parts = []  # Reset previous answer
-            continue  
+            # Detect timestamp
+            timestamp_match = timestamp_pattern.match(line)
 
-        # ✅ Capture answer content (until "# end of answer")
-        if capturing_answer:
-            if "# end of answer" in line:
-                capturing_answer = False
-                full_answer = " ".join(answer_parts).strip()  # Combine answer text
-                total_answers += 1  
+            # Detect inference result line
+            inference_match = inference_pattern.search(line)
+            if timestamp_match and inference_match:
+                timestamp = timestamp_match.group(1)
+                email = inference_match.group(1)
+                answer = inference_match.group(2).strip()
 
-                # ✅ Store Email, Question, and Answer
-                if email and question:
-                    parsed_logs.append([email, question, full_answer])
-                    email, question = None, None  # Reset for next entry
+                # Skip if the email contains an unwanted name
+                if any(name in email.lower() for name in unwanted_names):
+                    continue
 
-                answer_parts = []
-            else:
-                answer_parts.append(line)  
+                inference_data.append([timestamp, email, answer])
 
-    print(f"✅ Extracted {total_questions} questions and {total_answers} answers.")
-    return parsed_logs
+    # Convert to DataFrame
+    df_inference = pd.DataFrame(inference_data, columns=["Timestamp", "Email", "Answer"])
+    return df_inference
 
-# Read the log file
-with open(input_file_path, "r", encoding="utf-8") as file:
-    log_lines = file.readlines()
+# Usage
+df_inference = extract_inference_lines_with_timestamp(log_file_path)
 
-# Process log entries
-parsed_data = parse_log_entries(log_lines)
-
-# ✅ Create DataFrame
-df = pd.DataFrame(parsed_data, columns=["Email", "Question", "Answer"])
-
-# ✅ Remove exact duplicate rows
-df.drop_duplicates(inplace=True)
-
-# ✅ Save to Excel instead of CSV
-df.to_excel(output_file_path, index=False)
-
-print(f"✅ Cleaned QA pairs saved in '{output_file_path}'.")
-
-# ✅ Final count verification
-print(f"✅ Final row count after deduplication: {len(df)}")
+# Display extracted data
+tools.display_dataframe_to_user(name="Filtered Inference Answers", dataframe=df_inference)
