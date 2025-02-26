@@ -5,24 +5,22 @@ import re
 input_file_path = "usagelog.txt"
 output_file_path = "simplified_logs.csv"
 
-# Function to parse log entries
+# Function to extract questions and answers
 def parse_log_entries(log_lines):
     parsed_logs = []
-    timestamp, user, question = None, None, None
+    question = None
     answer_parts = []
     capturing_answer = False
 
     for line in log_lines:
         line = line.strip()
 
-        # Extract timestamp, user, and question
-        question_match = re.match(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\s*[\w\d]+,\s*([\w\s]+),\s*([\w\.-]+@[\w\.-]+),\s*qa:(?!result:)(.*)", line)
-        if question_match:
-            timestamp, user, question = question_match.group(1), question_match.group(2), question_match.group(4)
-            continue  # Move to the next line
+        # Detect question (line contains "qa:" but NOT "qa:result")
+        if "qa:" in line and "qa:result" not in line:
+            question = re.sub(r".*qa:\s*", "", line).strip()  # Extract the question text
 
-        # Detect start of answer
-        if "qa:result:# Start of answer" in line:
+        # Detect start of answer (line contains "qa:result")
+        elif "qa:result" in line:
             capturing_answer = True
             answer_parts = []  # Reset previous answer
             continue
@@ -31,13 +29,13 @@ def parse_log_entries(log_lines):
         if capturing_answer:
             if "# end of answer" in line:
                 capturing_answer = False
-                # Save entry only if valid
-                if timestamp and user and question and answer_parts:
-                    parsed_logs.append([timestamp, user, question, " ".join(answer_parts).strip()])
-                timestamp, user, question = None, None, None  # Reset for next QA pair
+                full_answer = " ".join(answer_parts).strip()  # Combine answer text
+                if question and full_answer:
+                    parsed_logs.append([question, full_answer])
+                question = None  # Reset for next question
                 answer_parts = []
             else:
-                answer_parts.append(line)  # Collect all answer parts (Answer, Reasoning, SourceRef)
+                answer_parts.append(line)  # Collect answer lines
 
     return parsed_logs
 
@@ -48,9 +46,8 @@ with open(input_file_path, "r", encoding="utf-8") as file:
 # Process log entries
 parsed_data = parse_log_entries(log_lines)
 
-# Create DataFrame with structured columns
-columns = ["Timestamp", "User", "Question", "Answer"]
-df = pd.DataFrame(parsed_data, columns=columns)
+# Create DataFrame
+df = pd.DataFrame(parsed_data, columns=["Question", "Answer"])
 
 # Save to CSV
 df.to_csv(output_file_path, index=False)
