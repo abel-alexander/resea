@@ -8,21 +8,20 @@ output_file_path = "extended_logs.csv"
 # Function to extract details from logs
 def parse_log_entries(log_lines):
     parsed_logs = []
+    timestamp, user_id, name, email = None, None, None, None
     question, answer, reasoning, source_ref = "", "", "", ""
-    timestamp, user = None, None
     capturing_answer = False
 
     for line in log_lines:
         line = line.strip()
 
-        # Extract timestamp, user, and action
-        timestamp_match = re.search(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\s*([\w\d]+),\s*([\w\.-]+@[\w\.-]+)", line)
-        if timestamp_match:
-            timestamp = timestamp_match.group(1)
-            user = timestamp_match.group(3)
+        # Extract timestamp, user_id, name, and email
+        user_match = re.search(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\s*(\w+),\s*([\w\s]+),\s*([\w\.-]+@[\w\.-]+)", line)
+        if user_match:
+            timestamp, user_id, name, email = user_match.groups()
 
-        # Extract question
-        if "qa:" in line and "result:#" not in line:  # Ensure it's a real question
+        # Extract question (ensuring it's not a system message)
+        if line.startswith("qa:") and "result:#" not in line:
             question = line.split("qa:", 1)[1].strip()
 
         # Detect start of answer
@@ -49,9 +48,9 @@ def parse_log_entries(log_lines):
             source_ref = line.split("SourceRef:", 1)[1].strip()
 
         # Save the complete entry when an answer is captured
-        if question and answer:
-            parsed_logs.append([timestamp, user, question, answer, reasoning, source_ref])
-            # Reset variables for next question-answer pair
+        if timestamp and user_id and email and question and answer:
+            parsed_logs.append([timestamp, user_id, name, email, question, answer, reasoning, source_ref])
+            # Reset for the next QA pair
             question, answer, reasoning, source_ref = "", "", "", ""
 
     return parsed_logs
@@ -64,7 +63,7 @@ with open(input_file_path, "r", encoding="utf-8") as file:
 parsed_data = parse_log_entries(log_lines)
 
 # Create DataFrame with structured columns
-columns = ["Timestamp", "User", "Question", "Answer", "Reasoning", "SourceRef"]
+columns = ["Timestamp", "User ID", "Name", "Email", "Question", "Answer", "Reasoning", "SourceRef"]
 df = pd.DataFrame(parsed_data, columns=columns)
 
 # Add placeholders for evaluation metrics
