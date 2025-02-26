@@ -3,7 +3,7 @@ import re
 
 # Input and output file paths
 input_file_path = "usagelog.txt"
-output_file_path = "qa_extracted.csv"
+output_file_path = "qa_extracted.xlsx"
 
 # Function to extract email, questions, and answers
 def parse_log_entries(log_lines):
@@ -18,7 +18,7 @@ def parse_log_entries(log_lines):
         line = line.strip()
 
         # ✅ Extract Email and Question (qa: but NOT qa:result)
-        match = re.match(r".*([\w\.-]+@[\w\.-]+),\s*qa:(?!result:)(.*)", line)
+        match = re.match(r".*?([\w\.\+\-]+@[a-zA-Z0-9\.-]+\.[a-zA-Z]{2,}),\s*qa:(?!result:)(.*)", line)
         if match:
             email, question = match.groups()
             total_questions += 1
@@ -62,8 +62,9 @@ df = pd.DataFrame(parsed_data, columns=["Email", "Question", "Answer"])
 # ✅ Remove exact duplicate rows
 df.drop_duplicates(inplace=True)
 
-# ✅ Save to CSV
-df.to_csv(output_file_path, index=False)
+# ✅ Save to Excel instead of CSV
+df.to_excel(output_file_path, index=False)
+
 print(f"✅ Cleaned QA pairs saved in '{output_file_path}'.")
 
 # ✅ Final count verification
