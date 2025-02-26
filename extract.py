@@ -2,50 +2,73 @@ import pandas as pd
 import re
 
 # Input and output file paths
-input_file_path = "usagelog.txt"  # Your log file
-output_file_path = "extended_logs.csv"  # Output CSV
+input_file_path = "usagelog.txt"  # Path to your log file
+output_file_path = "extended_logs.csv"  # Output CSV file
 
-# Function to parse a single log line
-def parse_log_line(log_line):
-    # Extract timestamp
-    timestamp_match = re.search(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", log_line)
-    timestamp = timestamp_match.group(0) if timestamp_match else None
+# Function to parse a single log entry
+def parse_log_entries(log_lines):
+    parsed_logs = []
+    question, answer, reasoning, source_ref = "", "", "", ""
+    timestamp, user, action = None, None, None
+    capturing_answer = False
 
-    # Extract user email or name
-    user_match = re.search(r"([\w\.-]+@[\w\.-]+\.\w+)", log_line)  # Matches emails
-    user = user_match.group(0).strip() if user_match else "Unknown"
+    for line in log_lines:
+        line = line.strip()
 
-    # Extract action type
-    action_match = re.search(r"(qa|result|sum|summary)", log_line, re.IGNORECASE)
-    action = action_match.group(0).lower() if action_match else None
+        # Extract timestamp and user details
+        timestamp_match = re.search(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\s*(\w+),\s*([\w\.\-]+@[\w\.\-]+)", line)
+        if timestamp_match:
+            timestamp, user = timestamp_match.group(1), timestamp_match.group(3)
 
-    # Extract question
-    question_match = re.search(r"question:\s*(.*?)(?=\s*answer:)", log_line, re.IGNORECASE)
-    question = question_match.group(1).strip() if question_match else ""
+        # Extract question
+        if "qa:" in line:
+            question = line.split("qa:", 1)[1].strip()
 
-    # Extract answer
-    answer_match = re.search(r"answer:\s*(.*)", log_line, re.IGNORECASE)
-    answer = answer_match.group(1).strip() if answer_match else ""
+        # Detect start of answer
+        if "result:# Start of answer" in line:
+            capturing_answer = True
+            answer, reasoning, source_ref = "", "", ""  # Reset previous data
+            continue
 
-    return [timestamp, user, action, question, answer]
+        # Capture answer content
+        if capturing_answer and "end of answer" not in line:
+            answer += line + " "
 
-# Read log file and process lines
-parsed_logs = []
+        # Detect end of answer
+        if "end of answer" in line:
+            capturing_answer = False
+
+        # Extract reasoning
+        if "Reasoning:" in line:
+            reasoning = line.split("Reasoning:", 1)[1].strip()
+
+        # Extract source reference
+        if "SourceRef:" in line:
+            source_ref = line.split("SourceRef:", 1)[1].strip()
+
+        # When an answer is fully captured, add the log entry
+        if question and answer:
+            parsed_logs.append([timestamp, user, question, answer.strip(), reasoning, source_ref])
+            question, answer, reasoning, source_ref = "", "", "", ""  # Reset for next entry
+
+    return parsed_logs
+
+# Read the log file
 with open(input_file_path, "r", encoding="utf-8") as file:
-    for line in file:
-        parsed_data = parse_log_line(line.strip())
-        if parsed_data[0]:  # Only include valid entries with a timestamp
-            parsed_logs.append(parsed_data)
+    log_lines = file.readlines()
+
+# Process log entries
+parsed_data = parse_log_entries(log_lines)
 
 # Create DataFrame with new columns
-columns = ["Timestamp", "User", "Action", "Question", "Answer"]
-df = pd.DataFrame(parsed_logs, columns=columns)
+columns = ["Timestamp", "User", "Question", "Answer", "Reasoning", "SourceRef"]
+df = pd.DataFrame(parsed_data, columns=columns)
 
 # Add placeholders for metrics
 df["Accuracy"] = None
 df["Hallucination Score"] = None
 df["Relevance"] = None
 
-# Save the extended CSV
+# Save to CSV
 df.to_csv(output_file_path, index=False)
 print(f"Extended CSV saved as '{output_file_path}'.")
