@@ -6,16 +6,19 @@ with open(input_file_path, "r", encoding="utf-8", errors="ignore") as infile:
 
 keep_lines = []
 capture = False
+prev_line = ""
 
 for line in lines:
     line = line.strip()  # Remove unnecessary whitespace
 
-    # Capture any line with 'qa:' (ensures questions are included)
+    # Capture any 'qa:' lines (ensures questions are included)
     if "qa:" in line:
         keep_lines.append(line)
 
-    # If 'qa:result' appears, start capturing
+    # If 'qa:result' appears, start capturing (but avoid duplicates)
     if "qa:result" in line:
+        if prev_line.strip() == line.strip():
+            continue  # Skip duplicate qa:result lines
         capture = True
         keep_lines.append(line)
 
@@ -28,6 +31,8 @@ for line in lines:
         if capture:  # Ensure we were capturing
             keep_lines.append(line)
             capture = False  # Stop capturing after writing it
+
+    prev_line = line  # Track last processed line
 
 # Remove duplicate consecutive `# end of answer` entries
 filtered_output = []
