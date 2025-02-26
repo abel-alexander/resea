@@ -1,32 +1,32 @@
-# Define input and output file paths
-input_file = "path/to/your/input.txt"
-output_file = "path/to/your/output.txt"
+input_file_path = "usagelog.txt"
+output_file_path = "filtered_usage.txt"
 
-# Open the input file for reading and output file for writing
-with open(input_file, 'r') as infile, open(output_file, 'w') as outfile:
-    inside_answer_block = False  # Flag to track if we are inside a QA answer block
+# Open file and ensure correct encoding
+with open(input_file_path, "r", encoding="utf-8", errors="ignore") as infile:
+    lines = infile.readlines()
 
-    for line in infile:
-        # Always preserve lines once inside the answer block
-        if inside_answer_block:
-            outfile.write(line)
-            # Check if this line is the end of the answer block
-            if "# end of answer" in line:
-                inside_answer_block = False
-            # Continue to next line (already written this one)
-            continue
+keep_lines = []
+capture = False
 
-        # If we encounter the start of an answer block, enable capture mode
-        if "qa:result:#Answer:" in line:
-            inside_answer_block = True
-            outfile.write(line)
-            # (We will capture subsequent lines until "# end of answer" is found)
-            continue
+for line in lines:
+    line = line.strip()  # Clean whitespace
 
-        # If the line contains 'qa:' (any other QA-related line), keep it
-        if "qa:" in line:
-            outfile.write(line)
-            # (No flag change needed if it's not an answer block marker)
-            continue
+    # If we find 'qa:result', start capturing and include the line
+    if "qa:result" in line:
+        capture = True
+        keep_lines.append(line)
 
-        # If none of the above conditions met, the line is not written (filtered out).
+    # If capture mode is ON, keep all lines (including empty ones)
+    elif capture:
+        keep_lines.append(line)
+
+    # If we reach '# end of answer', include it and stop capturing
+    if "# end of answer" in line:
+        keep_lines.append(line)
+        capture = False  # Stop capturing
+
+# Save the filtered output
+with open(output_file_path, "w", encoding="utf-8") as outfile:
+    outfile.write("\n".join(keep_lines))
+
+print(f"Filtered lines saved to {output_file_path}")
