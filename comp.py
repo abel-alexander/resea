@@ -1,49 +1,30 @@
-import streamlit as st
-import fitz  # PyMuPDF
+import re
 
-st.title("PDF Table of Contents Extractor (Editable Dropdown)")
+# Define the input and output file paths
+input_file_path = "usage.log"
+output_file_path = "filtered_usage.log"
 
-uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
+# Read the file and extract relevant lines
+with open(input_file_path, "r", encoding="utf-8") as infile:
+    lines = infile.readlines()
 
-if uploaded_file is not None:
-    with fitz.open(stream=uploaded_file.read(), filetype="pdf") as doc:
-        toc = extract_hyperlinked_toc(doc)
+keep_lines = []
+capture = False
 
-        if toc:
-            st.subheader("Extracted Table of Contents")
+for line in lines:
+    if "qa:" in line:
+        keep_lines.append(line)
+    elif "qa:result:#Answer:" in line:
+        capture = True
+        keep_lines.append(line)
+    elif "# end of answer" in line:
+        capture = False
+        keep_lines.append(line)
+    elif capture:
+        keep_lines.append(line)
 
-            # Store editable ToC in session state
-            if "edited_toc" not in st.session_state:
-                st.session_state.edited_toc = {entry["id"]: entry["title"] for entry in toc}
+# Write the filtered lines to a new file
+with open(output_file_path, "w", encoding="utf-8") as outfile:
+    outfile.writelines(keep_lines)
 
-            # ✅ Expander for editing all sections
-            with st.expander("Edit Table of Contents"):
-                for entry in toc:
-                    new_title = st.text_input(
-                        f"Edit title for Page {entry['pno_from']} - {entry['pno_to']}:",
-                        value=st.session_state.edited_toc[entry["id"]],
-                        key=f"title_{entry['id']}"
-                    )
-                    st.session_state.edited_toc[entry["id"]] = new_title  # Save changes dynamically
-
-            # ✅ Button to "Set ToC" after editing
-            if st.button("Set ToC"):
-                for entry in toc:
-                    entry["title"] = st.session_state.edited_toc[entry["id"]]
-
-                # ✅ Update dropdown options with edited titles (no page numbers)
-                st.session_state.dropdown_options = [entry["title"] for entry in toc]
-                st.success("ToC has been updated!")
-
-            # ✅ Dropdown below the button, showing only section names after edits
-            if "dropdown_options" in st.session_state:
-                selected_section = st.selectbox(
-                    "Updated Sections:",
-                    options=st.session_state.dropdown_options
-                )
-
-            # ✅ Display the updated ToC
-            st.subheader("Updated Table of Contents")
-            for entry in toc:
-                edited_title = st.session_state.edited_toc[entry["id"]]
-                st.write(f"**{edited_title}** (Page {entry['pno_from']}-{entry['pno_to']})")
+print(f"Filtered lines saved to {output_file_path}")
