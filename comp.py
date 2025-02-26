@@ -1,27 +1,32 @@
-input_file_path = "usage.log"
-output_file_path = "filtered_usage.log"
+# Define input and output file paths
+input_file = "path/to/your/input.txt"
+output_file = "path/to/your/output.txt"
 
-# Read the file and extract relevant lines
-with open(input_file_path, "r", encoding="utf-8") as infile:
-    lines = infile.readlines()
+# Open the input file for reading and output file for writing
+with open(input_file, 'r') as infile, open(output_file, 'w') as outfile:
+    inside_answer_block = False  # Flag to track if we are inside a QA answer block
 
-keep_lines = []
-capture = False
+    for line in infile:
+        # Always preserve lines once inside the answer block
+        if inside_answer_block:
+            outfile.write(line)
+            # Check if this line is the end of the answer block
+            if "# end of answer" in line:
+                inside_answer_block = False
+            # Continue to next line (already written this one)
+            continue
 
-for line in lines:
-    if "qa:" in line:
-        keep_lines.append(line)
-    elif "qa:result:#Answer:" in line:
-        capture = True
-        keep_lines.append(line)
-    elif "# end of answer" in line:
-        capture = False
-        keep_lines.append(line)
-    elif capture:  # Keep everything between qa:result:#Answer: and # end of answer
-        keep_lines.append(line)
+        # If we encounter the start of an answer block, enable capture mode
+        if "qa:result:#Answer:" in line:
+            inside_answer_block = True
+            outfile.write(line)
+            # (We will capture subsequent lines until "# end of answer" is found)
+            continue
 
-# Write the filtered lines to a new file
-with open(output_file_path, "w", encoding="utf-8") as outfile:
-    outfile.writelines(keep_lines)
+        # If the line contains 'qa:' (any other QA-related line), keep it
+        if "qa:" in line:
+            outfile.write(line)
+            # (No flag change needed if it's not an answer block marker)
+            continue
 
-print(f"Filtered lines saved to {output_file_path}")
+        # If none of the above conditions met, the line is not written (filtered out).
