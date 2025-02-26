@@ -1,72 +1,82 @@
-import fitz  # PyMuPDF
+import pandas as pd
+import re
 
-def pdf_get_toc_with_links(file_name):
-    doc = fitz.open(file_name)
-    toc_page_number = 2  # 3rd page (0-based index)
-    toc_page = doc[toc_page_number]
+# Input and output file paths
+input_file_path = "usagelog.txt"
+output_file_path = "qa_cleaned.csv"
 
-    # Extract hyperlinks and text blocks from the ToC page
-    links = toc_page.get_links()
-    text_blocks = toc_page.get_text("blocks")
+# Users to exclude
+excluded_users = {"Abel", "Anita", "Kenny"}
 
-    plst = []  # Final output list
-    unique_entries = set()  # To prevent duplicates
+# Function to extract questions and answers correctly
+def parse_log_entries(log_lines):
+    parsed_logs = []
+    question, user, timestamp = None, None, None
+    answer_parts = []
+    capturing_answer = False
+    total_questions = 0
+    total_answers = 0
 
-    section_counter = ord('A')  # Counter for unknown sections
-    id_counter = 1
+    for i, line in enumerate(log_lines):
+        line = line.strip()
 
-    for link in links:
-        link_rect = fitz.Rect(link["from"])  # Get the hyperlink bounding box
-        destination_page = link["page"] + 1  # Convert to 1-indexed
+        # Ignore logs that contain "sum:@" (irrelevant data)
+        if "sum:@" in line:
+            continue  
 
-        # Expand bounding box slightly to capture surrounding text
-        expanded_rect = link_rect + (-5, -2, 5, 2)
+        # Extract timestamp, user, and question (detects "qa:" but NOT "qa:result")
+        match = re.match(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\s*[\w\d]+,\s*([\w\s]+),\s*([\w\.-]+@[\w\.-]+),\s*qa:(?!result:)(.*)", line)
+        if match:
+            timestamp, user, email, question = match.groups()
 
-        matched_text = None
-        min_distance = float("inf")
+            # Exclude specific users
+            if any(excluded in user for excluded in excluded_users):
+                continue  
 
-        # Iterate over text blocks to find the closest match
-        for block in text_blocks:
-            text_rect = fitz.Rect(block[:4])  # Get text bounding box
-            if expanded_rect.intersects(text_rect):  # Check if expanded box intersects
-                # Select the closest text block
-                distance = abs(link_rect.y0 - text_rect.y0)
-                if distance < min_distance:
-                    matched_text = block[4].strip()
-                    min_distance = distance
+            total_questions += 1
+            continue  
 
-        # Assign a fallback name if no match is found
-        if not matched_text:
-            matched_text = f"Unknown Section {chr(section_counter)}"
-            section_counter += 1
+        # Detect start of answer (contains "qa:result")
+        elif "qa:result" in line:
+            capturing_answer = True
+            answer_parts = []  # Reset previous answer
+            continue  
 
-        # Avoid duplicates
-        entry_key = (matched_text, destination_page)
-        if entry_key in unique_entries:
-            continue  # Skip duplicate entries
-        unique_entries.add(entry_key)
+        # Capture answer content (until "# end of answer")
+        if capturing_answer:
+            if "# end of answer" in line:
+                capturing_answer = False
+                full_answer = " ".join(answer_parts).strip()  # Merge answer text
+                total_answers += 1  
 
-        # Append result in plst format
-        plst.append({
-            "id": id_counter,
-            "lvl": 1,
-            "title": matched_text,
-            "pno_from": destination_page,
-            "pno_to": destination_page  # We will adjust this later
-        })
-        id_counter += 1
+                # ✅ Ensure we store Q&A pair properly
+                if question:
+                    parsed_logs.append([timestamp, user, question, full_answer])
+                    question = None  
 
-    # Fix pno_to to correctly span across pages
-    for i in range(len(plst)):
-        if i < len(plst) - 1:
-            plst[i]["pno_to"] = plst[i + 1]["pno_from"] - 1
-        else:
-            plst[i]["pno_to"] = doc.page_count  # Last entry spans till the end
+                answer_parts = []
+            else:
+                answer_parts.append(line)  
 
-    doc.close()
+    print(f"✅ Extracted {total_questions} questions and {total_answers} answers.")
+    return parsed_logs
 
-    # Print the final structured ToC
-    for entry in plst:
-        print(entry)
+# Read the log file
+with open(input_file_path, "r", encoding="utf-8") as file:
+    log_lines = file.readlines()
 
-    return plst
+# Process log entries
+parsed_data = parse_log_entries(log_lines)
+
+# Create DataFrame
+df = pd.DataFrame(parsed_data, columns=["Timestamp", "User", "Question", "Answer"])
+
+# Remove exact duplicate rows
+df.drop_duplicates(inplace=True)
+
+# Save to CSV
+df.to_csv(output_file_path, index=False)
+print(f"✅ Cleaned QA pairs saved in '{output_file_path}'.")
+
+# Final count verification
+print(f"✅ Final row count after deduplication: {len(df)}")
