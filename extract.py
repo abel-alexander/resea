@@ -3,7 +3,7 @@ import re
 
 # Input and output file paths
 input_file_path = "usagelog.txt"
-output_file_path = "simplified_logs.csv"
+output_file_path = "qa_extracted.csv"
 
 # Function to extract questions and answers
 def parse_log_entries(log_lines):
@@ -15,7 +15,7 @@ def parse_log_entries(log_lines):
     for line in log_lines:
         line = line.strip()
 
-        # Detect question (line contains "qa:" but NOT "qa:result")
+        # Extract question (line contains "qa:" but NOT "qa:result")
         if "qa:" in line and "qa:result" not in line:
             question = re.sub(r".*qa:\s*", "", line).strip()  # Extract the question text
 
@@ -51,4 +51,4 @@ df = pd.DataFrame(parsed_data, columns=["Question", "Answer"])
 
 # Save to CSV
 df.to_csv(output_file_path, index=False)
-print(f"✅ Simplified CSV saved as '{output_file_path}'.")
+print(f"✅ Extracted questions and answers saved in '{output_file_path}'.")
