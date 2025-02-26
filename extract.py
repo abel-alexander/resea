@@ -17,12 +17,12 @@ def parse_log_entries(log_lines):
     for line in log_lines:
         line = line.strip()
 
-        # Extract question (contains "qa:" but NOT "qa:result")
+        # Detect and extract the question (any line that contains "qa:")
         if "qa:" in line and "qa:result" not in line:
             question = re.sub(r".*qa:\s*", "", line).strip()
             total_questions += 1  # Count the extracted questions
 
-        # Detect start of answer (contains "qa:result")
+        # Detect start of answer (any line that contains "qa:result")
         elif "qa:result" in line:
             capturing_answer = True
             answer_parts = []  # Reset previous answer
@@ -35,8 +35,8 @@ def parse_log_entries(log_lines):
                 full_answer = " ".join(answer_parts).strip()  # Combine answer text
                 total_answers += 1  # Count the extracted answers
 
-                # Ensure question is not lost even if no answer
-                if question:
+                # Ensure both question and answer are captured
+                if question and full_answer:
                     parsed_logs.append([question, full_answer])
                     question = None  # Reset for next question
 
