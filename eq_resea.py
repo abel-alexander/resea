@@ -8,38 +8,43 @@ def extract_qa_data(log_file_path):
     current_answer = None
     collecting_answer = False
     
+    # Timestamp pattern (assuming format: YYYY-MM-DD HH:MM:SS,XXX)
+    timestamp_pattern = r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}'
+
     with open(log_file_path, 'r', encoding='utf-8') as file:
         lines = file.readlines()
 
     for i, line in enumerate(lines):
-        # Detect QA question line
-        qa_match = re.search(r'([\w\.-]+@[\w\.-]+).*?qa:\s*(.+)', line, re.IGNORECASE)
-        if qa_match:
+        # Check if the line starts with a timestamp (indicating a new log entry)
+        if re.match(timestamp_pattern, line):
             # If we were collecting an answer, finalize the previous entry
             if current_email and current_question and current_answer:
                 qa_data.append([current_email, current_question, current_answer.strip()])
             
-            # Start new question
+            # Reset variables for the new log entry
+            current_email = None
+            current_question = None
+            current_answer = None
+            collecting_answer = False
+
+        # Detect QA question line within the current log entry
+        qa_match = re.search(r'([\w\.-]+@[\w\.-]+).*?qa:\s*(.+)', line, re.IGNORECASE)
+        if qa_match:
             current_email = qa_match.group(1)
             current_question = qa_match.group(2).strip()
             current_answer = ""
             collecting_answer = False  # Reset answer collection
 
         # Detect start of the answer
-        if "inference:result" in line:
+        if "inference:result" in line and current_question:
             collecting_answer = True  # Start collecting answer
             continue
 
-        # Handle the new condition: If the next line is a new `qa:`, stop collecting the answer
+        # Collect the answer until we hit the next timestamp
         if collecting_answer:
-            if i + 1 < len(lines) and "qa:" in lines[i + 1]:
+            if re.match(timestamp_pattern, line):  # Stop if new timestamp detected
                 collecting_answer = False
                 continue
-            
-            if "#end of answer" in line:
-                collecting_answer = False
-                continue
-            
             current_answer += line.strip() + " "
 
     # Append the last QA pair if there's data
@@ -51,7 +56,7 @@ def extract_qa_data(log_file_path):
     return df
 
 # Usage
-log_file_path = "path/to/your/logfile.txt"  # Replace with the actual file path
+log_file_path = "path/to/your/logfile.txt"  # Replace with actual file path
 df = extract_qa_data(log_file_path)
 
 # Display extracted data
