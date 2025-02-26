@@ -1,6 +1,3 @@
-import re
-
-# Define the input and output file paths
 input_file_path = "usage.log"
 output_file_path = "filtered_usage.log"
 
@@ -20,7 +17,7 @@ for line in lines:
     elif "# end of answer" in line:
         capture = False
         keep_lines.append(line)
-    elif capture:
+    elif capture:  # Keep everything between qa:result:#Answer: and # end of answer
         keep_lines.append(line)
 
 # Write the filtered lines to a new file
