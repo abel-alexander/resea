@@ -11,32 +11,40 @@ def parse_log_entries(log_lines):
     question = None
     answer_parts = []
     capturing_answer = False
+    total_questions = 0
+    total_answers = 0
 
     for line in log_lines:
         line = line.strip()
 
-        # Extract question (line contains "qa:" but NOT "qa:result")
+        # Extract question (contains "qa:" but NOT "qa:result")
         if "qa:" in line and "qa:result" not in line:
-            question = re.sub(r".*qa:\s*", "", line).strip()  # Extract the question text
+            question = re.sub(r".*qa:\s*", "", line).strip()
+            total_questions += 1  # Count the extracted questions
 
-        # Detect start of answer (line contains "qa:result")
+        # Detect start of answer (contains "qa:result")
         elif "qa:result" in line:
             capturing_answer = True
             answer_parts = []  # Reset previous answer
-            continue
+            continue  # Skip this line
 
         # Capture answer content
         if capturing_answer:
             if "# end of answer" in line:
                 capturing_answer = False
                 full_answer = " ".join(answer_parts).strip()  # Combine answer text
-                if question and full_answer:
+                total_answers += 1  # Count the extracted answers
+
+                # Ensure question is not lost even if no answer
+                if question:
                     parsed_logs.append([question, full_answer])
-                question = None  # Reset for next question
+                    question = None  # Reset for next question
+
                 answer_parts = []
             else:
                 answer_parts.append(line)  # Collect answer lines
 
+    print(f"✅ Extracted {total_questions} questions and {total_answers} answers.")
     return parsed_logs
 
 # Read the log file
@@ -51,4 +59,4 @@ df = pd.DataFrame(parsed_data, columns=["Question", "Answer"])
 
 # Save to CSV
 df.to_csv(output_file_path, index=False)
-print(f"✅ Extracted questions and answers saved in '{output_file_path}'.")
+print(f"✅ Extracted QA pairs saved in '{output_file_path}'.")
