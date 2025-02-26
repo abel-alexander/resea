@@ -1,64 +1,50 @@
-import os
-import hashlib
-import subprocess
-from datetime import datetime
+import pandas as pd
+import re
 
-# Path to the repository and the file to monitor
-repo_dir = "/path/to/your/repo"
-file_to_watch = os.path.join(repo_dir, "usage_logs.txt")
-hash_file = os.path.join(repo_dir, ".last_hash")  # To store the last hash
+def extract_qa_data(log_file_path):
+    qa_data = []
+    current_email = None
+    current_question = None
+    current_answer = None
+    collecting_answer = False
+    
+    with open(log_file_path, 'r', encoding='utf-8') as file:
+        for line in file:
+            # Detect the QA question line
+            qa_match = re.search(r'([\w\.-]+@[\w\.-]+).*?qa:\s*(.+)', line, re.IGNORECASE)
+            if qa_match:
+                if current_email and current_question and current_answer:
+                    qa_data.append([current_email, current_question, current_answer.strip()])
+                
+                current_email = qa_match.group(1)
+                current_question = qa_match.group(2).strip()
+                current_answer = ""
+                collecting_answer = False  # Reset answer collection
 
-def calculate_file_hash(filepath):
-    """Calculate the SHA256 hash of a file."""
-    with open(filepath, "rb") as f:
-        file_data = f.read()
-    return hashlib.sha256(file_data).hexdigest()
+            # Detect the start of the answer
+            if "inference:result" in line:
+                collecting_answer = True  # Start collecting answer
+                continue
 
-def load_last_hash(hash_file_path):
-    """Load the last saved hash from the hash file."""
-    if os.path.exists(hash_file_path):
-        with open(hash_file_path, "r") as f:
-            return f.read().strip()
-    return None
+            # Collect answer until we hit `#end of answer`
+            if collecting_answer:
+                if "#end of answer" in line:
+                    collecting_answer = False
+                    continue
+                current_answer += line.strip() + " "
 
-def save_current_hash(hash_file_path, file_hash):
-    """Save the current file hash to the hash file."""
-    with open(hash_file_path, "w") as f:
-        f.write(file_hash)
+    # Append last QA pair
+    if current_email and current_question and current_answer:
+        qa_data.append([current_email, current_question, current_answer.strip()])
+    
+    # Convert to DataFrame
+    df = pd.DataFrame(qa_data, columns=["Email", "Question", "Answer"])
+    return df
 
-def main():
-    os.chdir(repo_dir)
+# Usage
+log_file_path = "path/to/your/logfile.txt"  # Replace with the actual file path
+df = extract_qa_data(log_file_path)
 
-    # Calculate the current hash of the file
-    if not os.path.exists(file_to_watch):
-        print(f"Error: {file_to_watch} does not exist.")
-        return
-
-    current_hash = calculate_file_hash(file_to_watch)
-    last_hash = load_last_hash(hash_file)
-
-    # Check if the file has changed
-    if current_hash != last_hash:
-        print("File has changed. Committing and pushing...")
-        try:
-            # Add the file to staging
-            subprocess.run(["git", "add", file_to_watch], check=True)
-
-            # Commit the changes
-            commit_message = f"Auto-commit: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-            subprocess.run(["git", "commit", "-m", commit_message], check=True)
-
-            # Push the changes
-            subprocess.run(["git", "push"], check=True)
-
-            # Save the new hash
-            save_current_hash(hash_file, current_hash)
-
-            print("Changes committed and pushed successfully.")
-        except subprocess.CalledProcessError as e:
-            print(f"Error during commit/push: {e}")
-    else:
-        print("No changes detected. Nothing to commit.")
-
-if __name__ == "__main__":
-    main()
+# Display extracted data
+import ace_tools as tools
+tools.display_dataframe_to_user(name="QA Data", dataframe=df)
