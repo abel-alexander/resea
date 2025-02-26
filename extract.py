@@ -12,11 +12,11 @@ def parse_log_entries(log_lines):
     answer, reasoning, source_ref = "", "", ""
     capturing_answer = False
 
-    for line in log_lines:
+    for i, line in enumerate(log_lines):
         line = line.strip()
 
         # Extract timestamp, user_id, name, email, and question
-        user_match = re.search(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\s*([\w\d]+),\s*([\w\s]+),\s*([\w\.-]+@[\w\.-]+),\s*qa:(.*)", line)
+        user_match = re.match(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\s*([\w\d]+),\s*([\w\s]+),\s*([\w\.-]+@[\w\.-]+),\s*qa:(.*)", line)
         if user_match:
             timestamp, user_id, name, email, question = user_match.groups()
             continue  # Move to the next line
@@ -39,10 +39,10 @@ def parse_log_entries(log_lines):
             # Detect end of answer
             if "# end of answer" in line:
                 capturing_answer = False
-                # Save extracted data
-                if question and answer:
+                # Save extracted data only if valid
+                if all([timestamp, user_id, name, email, question, answer]):
                     parsed_logs.append([timestamp, user_id, name, email, question, answer, reasoning, source_ref])
-                # Reset for next QA pair
+                # Reset variables for the next QA pair
                 timestamp, user_id, name, email, question = None, None, None, None, None
                 answer, reasoning, source_ref = "", "", ""
 
