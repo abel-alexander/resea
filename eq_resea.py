@@ -9,31 +9,40 @@ def extract_qa_data(log_file_path):
     collecting_answer = False
     
     with open(log_file_path, 'r', encoding='utf-8') as file:
-        for line in file:
-            # Detect the QA question line
-            qa_match = re.search(r'([\w\.-]+@[\w\.-]+).*?qa:\s*(.+)', line, re.IGNORECASE)
-            if qa_match:
-                if current_email and current_question and current_answer:
-                    qa_data.append([current_email, current_question, current_answer.strip()])
-                
-                current_email = qa_match.group(1)
-                current_question = qa_match.group(2).strip()
-                current_answer = ""
-                collecting_answer = False  # Reset answer collection
+        lines = file.readlines()
 
-            # Detect the start of the answer
-            if "inference:result" in line:
-                collecting_answer = True  # Start collecting answer
+    for i, line in enumerate(lines):
+        # Detect QA question line
+        qa_match = re.search(r'([\w\.-]+@[\w\.-]+).*?qa:\s*(.+)', line, re.IGNORECASE)
+        if qa_match:
+            # If we were collecting an answer, finalize the previous entry
+            if current_email and current_question and current_answer:
+                qa_data.append([current_email, current_question, current_answer.strip()])
+            
+            # Start new question
+            current_email = qa_match.group(1)
+            current_question = qa_match.group(2).strip()
+            current_answer = ""
+            collecting_answer = False  # Reset answer collection
+
+        # Detect start of the answer
+        if "inference:result" in line:
+            collecting_answer = True  # Start collecting answer
+            continue
+
+        # Handle the new condition: If the next line is a new `qa:`, stop collecting the answer
+        if collecting_answer:
+            if i + 1 < len(lines) and "qa:" in lines[i + 1]:
+                collecting_answer = False
                 continue
+            
+            if "#end of answer" in line:
+                collecting_answer = False
+                continue
+            
+            current_answer += line.strip() + " "
 
-            # Collect answer until we hit `#end of answer`
-            if collecting_answer:
-                if "#end of answer" in line:
-                    collecting_answer = False
-                    continue
-                current_answer += line.strip() + " "
-
-    # Append last QA pair
+    # Append the last QA pair if there's data
     if current_email and current_question and current_answer:
         qa_data.append([current_email, current_question, current_answer.strip()])
     
