@@ -5,57 +5,50 @@ import re
 input_file_path = "usagelog.txt"
 output_file_path = "extended_logs.csv"
 
-# Function to extract details from logs
+# Function to parse log entries correctly
 def parse_log_entries(log_lines):
     parsed_logs = []
-    timestamp, user_id, name, email = None, None, None, None
-    question, answer, reasoning, source_ref = "", "", "", ""
+    timestamp, user_id, name, email, question = None, None, None, None, None
+    answer, reasoning, source_ref = "", "", ""
     capturing_answer = False
 
     for line in log_lines:
         line = line.strip()
 
-        # Extract timestamp, user_id, name, and email
-        user_match = re.search(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\s*(\w+),\s*([\w\s]+),\s*([\w\.-]+@[\w\.-]+)", line)
+        # Extract timestamp, user_id, name, email, and question
+        user_match = re.search(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\s*([\w\d]+),\s*([\w\s]+),\s*([\w\.-]+@[\w\.-]+),\s*qa:(.*)", line)
         if user_match:
-            timestamp, user_id, name, email = user_match.groups()
-
-        # Extract question (ensuring it's not a system message)
-        if line.startswith("qa:") and "result:#" not in line:
-            question = line.split("qa:", 1)[1].strip()
+            timestamp, user_id, name, email, question = user_match.groups()
+            continue  # Move to the next line
 
         # Detect start of answer
-        if "result:# Start of answer" in line:
+        if "qa:result:# Start of answer" in line:
             capturing_answer = True
-            answer = ""  # Reset previous answer
+            answer, reasoning, source_ref = "", "", ""  # Reset previous values
             continue  # Skip this line
 
         # Capture answer content
-        if capturing_answer and "end of answer" not in line:
-            answer += line + " "
+        if capturing_answer:
+            if line.startswith("Answer:"):
+                answer = line.replace("Answer:", "").strip()
+            elif line.startswith("Reasoning:"):
+                reasoning = line.replace("Reasoning:", "").strip()
+            elif line.startswith("SourceRef:"):
+                source_ref = line.replace("SourceRef:", "").strip()
 
-        # Detect end of answer
-        if "end of answer" in line:
-            capturing_answer = False
-            answer = answer.strip()
-
-        # Extract reasoning
-        if "Reasoning:" in line:
-            reasoning = line.split("Reasoning:", 1)[1].strip()
-
-        # Extract source reference
-        if "SourceRef:" in line:
-            source_ref = line.split("SourceRef:", 1)[1].strip()
-
-        # Save the complete entry when an answer is captured
-        if timestamp and user_id and email and question and answer:
-            parsed_logs.append([timestamp, user_id, name, email, question, answer, reasoning, source_ref])
-            # Reset for the next QA pair
-            question, answer, reasoning, source_ref = "", "", "", ""
+            # Detect end of answer
+            if "# end of answer" in line:
+                capturing_answer = False
+                # Save extracted data
+                if question and answer:
+                    parsed_logs.append([timestamp, user_id, name, email, question, answer, reasoning, source_ref])
+                # Reset for next QA pair
+                timestamp, user_id, name, email, question = None, None, None, None, None
+                answer, reasoning, source_ref = "", "", ""
 
     return parsed_logs
 
-# Read log file
+# Read the log file
 with open(input_file_path, "r", encoding="utf-8") as file:
     log_lines = file.readlines()
 
