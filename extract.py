@@ -1,65 +1,51 @@
 import pandas as pd
-from rouge_score import rouge_scorer
+import re
 
-def calculate_rouge_scores(text_pairs):
-    """
-    Takes a list of pairs of texts and returns a DataFrame with each text in separate columns
-    and multiple ROUGE scores (ROUGE-1, ROUGE-2, ROUGE-L) in additional columns.
-    
-    Parameters:
-    text_pairs (list of tuples): List where each element is a tuple containing two texts.
-    
-    Returns:
-    pd.DataFrame: DataFrame with columns 'Text1', 'Text2', and ROUGE scores (precision, recall, and F1).
-    """
-    # Initialize a DataFrame with each text in separate columns
-    df = pd.DataFrame(text_pairs, columns=['Text1', 'Text2'])
+# Input and output file paths
+input_file_path = "usagelog.txt"  # Your log file
+output_file_path = "extended_logs.csv"  # Output CSV
 
-    # Initialize the ROUGE scorer with the metrics we want to calculate
-    scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'], use_stemmer=True)
+# Function to parse a single log line
+def parse_log_line(log_line):
+    # Extract timestamp
+    timestamp_match = re.search(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", log_line)
+    timestamp = timestamp_match.group(0) if timestamp_match else None
 
-    # Calculate ROUGE scores for each pair and store them in lists
-    rouge1_precision, rouge1_recall, rouge1_f1 = [], [], []
-    rouge2_precision, rouge2_recall, rouge2_f1 = [], [], []
-    rougeL_precision, rougeL_recall, rougeL_f1 = [], [], []
+    # Extract user email or name
+    user_match = re.search(r"([\w\.-]+@[\w\.-]+\.\w+)", log_line)  # Matches emails
+    user = user_match.group(0).strip() if user_match else "Unknown"
 
-    for text1, text2 in text_pairs:
-        scores = scorer.score(text1, text2)
-        
-        # ROUGE-1
-        rouge1_precision.append(scores['rouge1'].precision)
-        rouge1_recall.append(scores['rouge1'].recall)
-        rouge1_f1.append(scores['rouge1'].fmeasure)
-        
-        # ROUGE-2
-        rouge2_precision.append(scores['rouge2'].precision)
-        rouge2_recall.append(scores['rouge2'].recall)
-        rouge2_f1.append(scores['rouge2'].fmeasure)
-        
-        # ROUGE-L
-        rougeL_precision.append(scores['rougeL'].precision)
-        rougeL_recall.append(scores['rougeL'].recall)
-        rougeL_f1.append(scores['rougeL'].fmeasure)
-    
-    # Add the ROUGE scores to the DataFrame
-    df['ROUGE-1 Precision'] = rouge1_precision
-    df['ROUGE-1 Recall'] = rouge1_recall
-    df['ROUGE-1 F1'] = rouge1_f1
-    df['ROUGE-2 Precision'] = rouge2_precision
-    df['ROUGE-2 Recall'] = rouge2_recall
-    df['ROUGE-2 F1'] = rouge2_f1
-    df['ROUGE-L Precision'] = rougeL_precision
-    df['ROUGE-L Recall'] = rougeL_recall
-    df['ROUGE-L F1'] = rougeL_f1
+    # Extract action type
+    action_match = re.search(r"(qa|result|sum|summary)", log_line, re.IGNORECASE)
+    action = action_match.group(0).lower() if action_match else None
 
-    return df
+    # Extract question
+    question_match = re.search(r"question:\s*(.*?)(?=\s*answer:)", log_line, re.IGNORECASE)
+    question = question_match.group(1).strip() if question_match else ""
 
-# Example usage:
-text_pairs = [
-    ("This is a sample text.", "This is another example of text."),
-    ("Data science is great.", "Machine learning is a subset of data science."),
-    ("Hello world!", "Hello, how are you?")
-]
+    # Extract answer
+    answer_match = re.search(r"answer:\s*(.*)", log_line, re.IGNORECASE)
+    answer = answer_match.group(1).strip() if answer_match else ""
 
-df = calculate_rouge_scores(text_pairs)
-print(df)
+    return [timestamp, user, action, question, answer]
+
+# Read log file and process lines
+parsed_logs = []
+with open(input_file_path, "r", encoding="utf-8") as file:
+    for line in file:
+        parsed_data = parse_log_line(line.strip())
+        if parsed_data[0]:  # Only include valid entries with a timestamp
+            parsed_logs.append(parsed_data)
+
+# Create DataFrame with new columns
+columns = ["Timestamp", "User", "Action", "Question", "Answer"]
+df = pd.DataFrame(parsed_logs, columns=columns)
+
+# Add placeholders for metrics
+df["Accuracy"] = None
+df["Hallucination Score"] = None
+df["Relevance"] = None
+
+# Save the extended CSV
+df.to_csv(output_file_path, index=False)
+print(f"Extended CSV saved as '{output_file_path}'.")
