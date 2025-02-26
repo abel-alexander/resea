@@ -5,7 +5,7 @@ import re
 input_file_path = "usagelog.txt"
 output_file_path = "qa_extracted.csv"
 
-# Function to extract questions and answers
+# Function to extract user queries and answers correctly
 def parse_log_entries(log_lines):
     parsed_logs = []
     question = None
@@ -17,40 +17,38 @@ def parse_log_entries(log_lines):
     for line in log_lines:
         line = line.strip()
 
+        # Ignore logs that contain "sum:@"
+        if "sum:@" in line:
+            continue  # Skip these lines
+
         # Detect question (contains "qa:" but NOT "qa:result")
         if "qa:" in line and "qa:result" not in line:
-            # Save previous question if it had no answer
-            if question is not None:
-                parsed_logs.append([question, ""])  # Store unanswered question
-            
+            # Extract the question text
             question = re.sub(r".*qa:\s*", "", line).strip()
-            total_questions += 1  # Count the extracted questions
+            total_questions += 1  # Count extracted questions
+            continue  # Move to the next line
 
         # Detect start of answer (contains "qa:result")
         elif "qa:result" in line:
             capturing_answer = True
             answer_parts = []  # Reset previous answer
-            continue
+            continue  # Skip this line
 
-        # Capture answer content
+        # Capture answer content (until "# end of answer")
         if capturing_answer:
             if "# end of answer" in line:
                 capturing_answer = False
                 full_answer = " ".join(answer_parts).strip()  # Combine answer text
-                total_answers += 1  # Count the extracted answers
+                total_answers += 1  # Count extracted answers
 
-                # Ensure the question is saved
-                if question is not None:
+                # ✅ Store Q&A pair
+                if question:
                     parsed_logs.append([question, full_answer])
                     question = None  # Reset for next question
 
                 answer_parts = []
             else:
                 answer_parts.append(line)  # Collect answer lines
-
-    # If the last question has no answer, save it
-    if question is not None:
-        parsed_logs.append([question, ""])  # Store unanswered question
 
     print(f"✅ Extracted {total_questions} questions and {total_answers} answers.")
     return parsed_logs
@@ -69,5 +67,5 @@ df = pd.DataFrame(parsed_data, columns=["Question", "Answer"])
 df.to_csv(output_file_path, index=False)
 print(f"✅ Extracted QA pairs saved in '{output_file_path}'.")
 
-# Verify count
-print(f"✅ Final row count: {len(df)} (Should match question count: {df['Question'].count()})")
+# Verify final count
+print(f"✅ Final row count: {len(df)} (Should match total extracted questions)")
