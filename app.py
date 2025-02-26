@@ -39,3 +39,8 @@ df_inference = extract_inference_lines_with_timestamp(log_file_path)
 
 # Display extracted data
 tools.display_dataframe_to_user(name="Filtered Inference Answers", dataframe=df_inference)
+# Merge both dataframes on Timestamp and Email (ensuring correct question-answer mapping)
+df_merged = pd.merge(df_qa, df_inference, on=["Timestamp", "Email"], how="inner")
+
+# Display merged dataframe
+tools.display_dataframe_to_user(name="Final QA Data", dataframe=df_merged)
