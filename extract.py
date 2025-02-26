@@ -17,16 +17,20 @@ def parse_log_entries(log_lines):
     for line in log_lines:
         line = line.strip()
 
-        # Detect and extract the question (any line that contains "qa:")
+        # Detect question (contains "qa:" but NOT "qa:result")
         if "qa:" in line and "qa:result" not in line:
+            # Save previous question if it had no answer
+            if question is not None:
+                parsed_logs.append([question, ""])  # Store unanswered question
+            
             question = re.sub(r".*qa:\s*", "", line).strip()
             total_questions += 1  # Count the extracted questions
 
-        # Detect start of answer (any line that contains "qa:result")
+        # Detect start of answer (contains "qa:result")
         elif "qa:result" in line:
             capturing_answer = True
             answer_parts = []  # Reset previous answer
-            continue  # Skip this line
+            continue
 
         # Capture answer content
         if capturing_answer:
@@ -35,14 +39,18 @@ def parse_log_entries(log_lines):
                 full_answer = " ".join(answer_parts).strip()  # Combine answer text
                 total_answers += 1  # Count the extracted answers
 
-                # Ensure both question and answer are captured
-                if question and full_answer:
+                # Ensure the question is saved
+                if question is not None:
                     parsed_logs.append([question, full_answer])
                     question = None  # Reset for next question
 
                 answer_parts = []
             else:
                 answer_parts.append(line)  # Collect answer lines
+
+    # If the last question has no answer, save it
+    if question is not None:
+        parsed_logs.append([question, ""])  # Store unanswered question
 
     print(f"✅ Extracted {total_questions} questions and {total_answers} answers.")
     return parsed_logs
@@ -60,3 +68,6 @@ df = pd.DataFrame(parsed_data, columns=["Question", "Answer"])
 # Save to CSV
 df.to_csv(output_file_path, index=False)
 print(f"✅ Extracted QA pairs saved in '{output_file_path}'.")
+
+# Verify count
+print(f"✅ Final row count: {len(df)} (Should match question count: {df['Question'].count()})")
