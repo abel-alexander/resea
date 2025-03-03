@@ -166,19 +166,3 @@ def evaluate_summary(input_text, summary):
 
 ---
 
-### **Why This Fix Works**
-✅ **Accuracy is now adjusted for long input texts.**  
-✅ **Short summaries are no longer unfairly penalized.**  
-✅ **Cosine Similarity & BLEU scores are weighted better against length.**  
-✅ **Still detects hallucinations & measures usefulness.**  
-
----
-
-### **What Changes in Output?**
-- **Before Fix**: If input text was **1000 words** and summary **50 words**, accuracy would be **very low**.  
-- **After Fix**: Accuracy **scales with summary length**, meaning if a short summary still **captures key details**, it won’t be unfairly penalized.  
-
----
-
-🚀 **Now you can run this without worrying about long input texts lowering accuracy!**  
-Let me know if you need any tweaks. 🎯
