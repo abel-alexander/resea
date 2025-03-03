@@ -1,5 +1,6 @@
 import nltk
 import string
+import spacy
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
@@ -7,18 +8,22 @@ from nltk.translate.meteor_score import meteor_score
 
 nltk.download('wordnet')
 
+# Load SpaCy for Named Entity Recognition (NER) to check hallucinations
+nlp = spacy.load("en_core_web_sm")
+
 def evaluate_summary(input_text, summary):
     """
     Evaluates a generated summary against the original input text.
+    Computes standard summarization metrics, along with accuracy, hallucination, and usefulness scores.
 
     Parameters:
     input_text (str): The original full text.
     summary (str): The generated summary.
 
     Returns:
-    dict: A dictionary with computed metrics.
+    dict: A dictionary with computed metrics, aggregate scores, and interpretation comments.
     """
-    
+
     # Preprocess text: Lowercase and remove punctuation
     def preprocess(text):
         return text.lower().translate(str.maketrans('', '', string.punctuation))
@@ -37,22 +42,68 @@ def evaluate_summary(input_text, summary):
     # METEOR score
     meteor = meteor_score([input_tokens], summary_tokens)
 
-    # TF-IDF Cosine Similarity
+    # TF-IDF Cosine Similarity (Measures semantic similarity → used for accuracy & hallucination)
     vectorizer = TfidfVectorizer()
     tfidf_matrix = vectorizer.fit_transform([input_clean, summary_clean])
     cosine_sim = cosine_similarity(tfidf_matrix[0], tfidf_matrix[1])[0][0]
 
-    # Compression Ratio
+    # Compression Ratio (Measures how much the summary compresses the original text)
     compression_ratio = len(input_tokens) / max(len(summary_tokens), 1)
 
     # Coverage (How much of the input text is included in the summary)
     coverage = len(set(summary_tokens).intersection(set(input_tokens))) / max(len(input_tokens), 1)
 
-    # Repetition (Ratio of repeated words in the summary)
+    # Repetition (Ratio of repeated words in the summary → higher means redundant)
     repetition = 1 - (len(set(summary_tokens)) / max(len(summary_tokens), 1))
 
     # Novelty (How much of the summary is new compared to the input)
     novelty = 1 - coverage
+
+    # Named Entity Overlap (Detects hallucination by checking if the same entities exist in both)
+    def named_entity_overlap(input_text, summary):
+        input_entities = {ent.text.lower() for ent in nlp(input_text).ents}
+        summary_entities = {ent.text.lower() for ent in nlp(summary).ents}
+        overlap = len(input_entities.intersection(summary_entities)) / max(len(summary_entities), 1)
+        return overlap  # Lower = More hallucination risk
+
+    entity_overlap = named_entity_overlap(input_text, summary)
+
+    # Aggregate Scores
+    accuracy_score = (cosine_sim + coverage + bleu_score) / 3
+    hallucination_score = 1 - ((cosine_sim + coverage + entity_overlap) / 3)  # Lower is better
+    usefulness_score = (compression_ratio + (1 - repetition) + (1 - hallucination_score)) / 3
+
+    # Generate Dynamic Interpretation Based on Scores
+    def interpret_accuracy(score):
+        if score > 0.8:
+            return "The summary is highly accurate, capturing key details from the original text."
+        elif score > 0.6:
+            return "The summary is mostly accurate but may omit some minor details."
+        else:
+            return "The summary may not accurately capture the original content."
+
+    def interpret_hallucination(score):
+        if score < 0.2:
+            return "The summary is well-grounded and does not introduce false information."
+        elif score < 0.5:
+            return "The summary introduces some unverified details but is mostly reliable."
+        else:
+            return "The summary contains a significant amount of hallucinated (made-up) content."
+
+    def interpret_usefulness(score):
+        if score > 0.8:
+            return "The summary is concise, relevant, and avoids unnecessary repetition."
+        elif score > 0.6:
+            return "The summary is useful but could be slightly more concise."
+        else:
+            return "The summary may contain unnecessary details or lack clarity."
+
+    # Attach Interpretations
+    interpretations = {
+        "Accuracy Interpretation": interpret_accuracy(accuracy_score),
+        "Hallucination Interpretation": interpret_hallucination(hallucination_score),
+        "Usefulness Interpretation": interpret_usefulness(usefulness_score),
+    }
 
     return {
         "BLEU": bleu_score,
@@ -61,12 +112,12 @@ def evaluate_summary(input_text, summary):
         "Compression Ratio": compression_ratio,
         "Coverage": coverage,
         "Repetition": repetition,
-        "Novelty": novelty
+        "Novelty": novelty,
+        "Entity Overlap": entity_overlap,
+        "Aggregate Scores": {
+            "Accuracy Score": accuracy_score,
+            "Hallucination Score": hallucination_score,
+            "Usefulness Score": usefulness_score
+        },
+        "Interpretations": interpretations
     }
-
-# Example Usage
-input_text = "The cat sat on the mat and looked at the moon."
-generated_summary = "The cat sat on the mat."
-
-metrics = evaluate_summary(input_text, generated_summary)
-print(metrics)
