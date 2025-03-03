@@ -1,59 +1,49 @@
-import pandas as pd
-import re
+import os
 
-def extract_inference_data(log_file_path):
-    inference_data = []
-    collecting_answer = False
-    current_email = None
-    current_timestamp = None
-    current_text = []
+def get_human_summary(summary_root, company, section):
+    """Retrieve human summary text based on company and section name."""
+    section_path = os.path.join(summary_root, company, section)
 
-    # Timestamp pattern (YYYY-MM-DD HH:MM:SS,XXX)
-    timestamp_pattern = re.compile(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})')
+    # Ensure section folder exists
+    if not os.path.exists(section_path):
+        print(f"Section '{section}' not found for company '{company}'.")
+        return None
 
-    # Email and inference pattern
-    inference_pattern = re.compile(r'([\w\.-]+@[\w\.-]+).*?inference:\s*(.+)', re.IGNORECASE)
+    # Find the first text file inside the section folder
+    text_files = [f for f in os.listdir(section_path) if f.endswith('.txt')]
+    if not text_files:
+        print(f"No summaries found in '{section}' of '{company}'.")
+        return None
 
-    with open(log_file_path, 'r', encoding='utf-8') as file:
-        for line in file:
-            line = line.strip()
+    text_file_path = os.path.join(section_path, text_files[0])  # Process the first found file
 
-            timestamp_match = timestamp_pattern.match(line)
+    with open(text_file_path, "r", encoding="utf-8") as f:
+        return f.read()
 
-            # If a new timestamp appears, store the previous inference block
-            if timestamp_match and collecting_answer:
-                inference_data.append([current_timestamp, current_email, " ".join(current_text).strip()])
-                collecting_answer = False
-                current_text = []
+# Set the root directory for human summaries
+summary_root = "/GCMTechAnalytics/docs/banker test/Human/Human Summaries"  # Adjust as needed
 
-            # Detect inference line
-            inference_match = inference_pattern.search(line)
-            if timestamp_match and inference_match:
-                current_timestamp = timestamp_match.group(1)
-                current_email = inference_match.group(1)
-                text_start = inference_match.group(2).strip()
+# Modify the loop in your script
+for t in toc:
+    lvl = t['lvl']
+    sname = t['title']
+    
+    # Extract company name from file_name (assuming file_name is like "microsoft.pdf")
+    company_name = os.path.basename(file_name).replace('.pdf', '').capitalize()  
 
-                current_text = [text_start]
-                collecting_answer = True
-                continue
+    # Get text from human summary
+    txt = get_human_summary(summary_root, company_name, sname)
 
-            # Collect multi-line text until a new timestamp appears
-            if collecting_answer:
-                current_text.append(line)
+    if txt is None:
+        continue  # Skip processing if no summary found
 
-    # Append last inference entry if still collecting
-    if collecting_answer and current_text:
-        inference_data.append([current_timestamp, current_email, " ".join(current_text).strip()])
+    st.markdown(sname)
+    result = mistral.process_section('@', sname, txt)
+    col_sum, col_score = st.columns([6,4])
 
-    # Convert to DataFrame
-    df_inference = pd.DataFrame(inference_data, columns=["Timestamp", "Email", "Text"])
-    df_inference["Timestamp"] = pd.to_datetime(df_inference["Timestamp"])  # Convert to datetime
-    return df_inference
-
-# Usage
-log_file_path = "path/to/cleaned_logfile.txt"  # Replace with actual path
-df_inference = extract_inference_data(log_file_path)
-
-# Display extracted data
-import ace_tools as tools
-tools.display_dataframe_to_user(name="Extracted Inference Data", dataframe=df_inference)
+    with col_sum:
+        st.markdown(result)
+    
+    with col_score:
+        score = evaluate_summary(txt, result)
+        st.markdown(score)
