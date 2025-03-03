@@ -1,15 +1,18 @@
 import nltk
 import string
-import spacy
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from nltk.translate.meteor_score import meteor_score
+from nltk.tokenize import word_tokenize
+from nltk.tag import pos_tag
+from nltk.chunk import ne_chunk
 
+nltk.download('punkt')
+nltk.download('averaged_perceptron_tagger')
+nltk.download('maxent_ne_chunker')
+nltk.download('words')
 nltk.download('wordnet')
-
-# Load SpaCy for Named Entity Recognition (NER) to check hallucinations
-nlp = spacy.load("en_core_web_sm")
 
 def evaluate_summary(input_text, summary):
     """
@@ -61,8 +64,16 @@ def evaluate_summary(input_text, summary):
 
     # Named Entity Overlap (Detects hallucination by checking if the same entities exist in both)
     def named_entity_overlap(input_text, summary):
-        input_entities = {ent.text.lower() for ent in nlp(input_text).ents}
-        summary_entities = {ent.text.lower() for ent in nlp(summary).ents}
+        def extract_entities(text):
+            words = word_tokenize(text)
+            pos_tags = pos_tag(words)
+            chunked = ne_chunk(pos_tags)
+            entities = { " ".join(c[0] for c in chunk) for chunk in chunked if hasattr(chunk, 'label') }
+            return entities
+
+        input_entities = extract_entities(input_text)
+        summary_entities = extract_entities(summary)
+
         overlap = len(input_entities.intersection(summary_entities)) / max(len(summary_entities), 1)
         return overlap  # Lower = More hallucination risk
 
@@ -108,16 +119,4 @@ def evaluate_summary(input_text, summary):
     return {
         "BLEU": bleu_score,
         "METEOR": meteor,
-        "Cosine Similarity": cosine_sim,
-        "Compression Ratio": compression_ratio,
-        "Coverage": coverage,
-        "Repetition": repetition,
-        "Novelty": novelty,
-        "Entity Overlap": entity_overlap,
-        "Aggregate Scores": {
-            "Accuracy Score": accuracy_score,
-            "Hallucination Score": hallucination_score,
-            "Usefulness Score": usefulness_score
-        },
-        "Interpretations": interpretations
-    }
+ 
