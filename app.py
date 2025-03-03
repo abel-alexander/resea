@@ -1,26 +1,21 @@
-import os
+from transformers import pipeline
 
-def get_reference_text(summary_root, company, section):
-    """Retrieve the reference text from human summaries based on company and section name.
-       Stops extracting when 'Q&A' is found."""
-    section_path = os.path.join(summary_root, company, section)
+llm = pipeline("text-generation", model="mistralai/Mistral-7B-Instruct-v0.1")
 
-    if not os.path.exists(section_path):
-        print(f"Section '{section}' not found for company '{company}'.")
-        return None
+def evaluate_with_llm(reference, generated):
+    prompt = f"""
+    You are an expert evaluator. Compare the generated summary with the reference summary.
+    
+    Reference Summary:
+    {reference}
+    
+    Generated Summary:
+    {generated}
 
-    # Find the first text file in the section folder
-    text_files = [f for f in os.listdir(section_path) if f.endswith('.txt')]
-    if not text_files:
-        print(f"No reference text found in '{section}' for '{company}'.")
-        return None
+    Provide a score between 0 and 10 based on correctness, coherence, and relevance. Explain briefly.
+    """
+    response = llm(prompt, max_length=100)
+    return response[0]['generated_text']  # Extract score
 
-    text_file_path = os.path.join(section_path, text_files[0])
-
-    with open(text_file_path, "r", encoding="utf-8") as f:
-        full_text = f.read()
-
-    # Stop extracting at "Q&A"
-    if "Q&A" in full_text:
-        return full_text.split("Q&A")[0].strip()  # Return text before "Q&A"
-    return full_text  # Return full text if "Q&A" is not found
+llm_score = evaluate_with_llm(ref_text, result)
+print("LLM Score:", llm_score)
