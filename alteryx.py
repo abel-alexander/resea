@@ -119,4 +119,16 @@ def evaluate_summary(input_text, summary):
     return {
         "BLEU": bleu_score,
         "METEOR": meteor,
- 
+        "Cosine Similarity": cosine_sim,
+        "Compression Ratio": compression_ratio,
+        "Coverage": coverage,
+        "Repetition": repetition,
+        "Novelty": novelty,
+        "Entity Overlap": entity_overlap,
+        "Aggregate Scores": {
+            "Accuracy Score": accuracy_score,
+            "Hallucination Score": hallucination_score,
+            "Usefulness Score": usefulness_score
+        },
+        "Interpretations": interpretations
+    }
