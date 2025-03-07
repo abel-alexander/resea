@@ -1,37 +1,22 @@
-from langchain.prompts import PromptTemplate
+import re
+from IPython.display import display, Markdown
 
-prompt = PromptTemplate(
-    input_variables=["markdown_content"],
-    template="""
-    You are a highly precise AI trained to extract a structured Table of Contents (ToC) from text.
+# Run LLM with stricter settings
+response = chain.run(extracted_toc_ocr)
 
-    **Instructions:**
-    - **Only** extract the Table of Contents.
-    - Do **not** include any explanations, introductions, or additional text.
-    - **Do not** repeat the input text.
-    - Preserve section numbering (e.g., `1, 1.1, i, ii, A, B`).
-    - **Format the response in Markdown**.
-    - **Return the output strictly between `<TOC_START>` and `<TOC_END>`**.
+# Step 1: Extract only ToC (remove hallucinated explanations)
+match = re.search(r"<TOC_START>(.*?)<TOC_END>", response, re.DOTALL)
+if match:
+    cleaned_toc = match.group(1).strip()
+else:
+    cleaned_toc = response.strip()  # Fallback in case delimiters are missing
 
-    ---
-    **Here is the document:**
-    ```
-    {markdown_content}
-    ```
+# Step 2: Remove unwanted code blocks or hallucinated output
+cleaned_toc = re.sub(r"```.*?```", "", cleaned_toc, flags=re.DOTALL)  # Remove any hallucinated code
+cleaned_toc = re.sub(r"\b(function|import|print|def|return|self|if|else|while|for|class)\b.*", "", cleaned_toc)  # Remove hallucinated Python functions
 
-    **Your response must follow this format:**
-    ```
-    <TOC_START>
-    # Table of Contents
+# Step 3: Remove excessive newlines
+cleaned_toc = re.sub(r"\n{3,}", "\n\n", cleaned_toc).strip()
 
-    - **1. Introduction**
-    - **2. Financial Overview**
-      - i. Revenue
-      - ii. Expenses
-    - **3. Market Analysis**
-      - a. Competitor Landscape
-      - b. Growth Opportunities
-    <TOC_END>
-    ```
-    """
-)
+# Display clean Markdown output
+display(Markdown(cleaned_toc))
