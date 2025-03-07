@@ -20,11 +20,14 @@ def extract_hyperlinks(pdf_path):
 
         for link in links:
             if "page" in link:  # Internal PDF link
-                target_page = link["page"]  # 0-indexed in PyMuPDF
-                if target_page > 0:  # Ignore links to page 1
-                    if target_page not in link_map:
-                        link_map[target_page] = []
-                    link_map[target_page].append(page_no + 1)  # Store 1-indexed page numbers
+                try:
+                    target_page = int(link["page"])  # Ensure it's an integer
+                    if target_page > 0:  # Ignore links to page 1
+                        if target_page not in link_map:
+                            link_map[target_page] = []
+                        link_map[target_page].append(page_no + 1)  # Store 1-indexed page numbers
+                except (ValueError, TypeError):
+                    continue  # Ignore non-integer page references
 
     return link_map
 
