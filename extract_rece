@@ -1,31 +1,80 @@
-import time
+import re
+from collections import Counter
+import PyPDF2
+import nltk
+from nltk.corpus import stopwords
+from pdfminer.pdfparser import PDFSyntaxError
+from pdfminer.pdfdocument import PDFDocument
+from pdfminer.pdfpage import PDFPage
+from pdfminer.pdfinterp import PDFResourceManager, PDFPageInterpreter
+from pdfminer.pdfdevice import PDFDevice
+from pdfminer.converter import PDFPageAggregator
+from pdfminer.layout import LAParams, LTTextBox, LTTextLine, LTFigure, LTAnno, LTText
+from pdfminer.pdfinterp import PDFTextExtractionNotAllowed
+import fitz  # PyMuPDF
 
-# Function to process the DataFrame
-def process_dataframe(df):
-    for idx, row in df.iterrows():
-        # Extract filename and question
-        filename = row['Filename']
-        question = row['Questions']
+# Download NLTK stopwords (run once)
+nltk.download('stopwords')
 
-        # Skip rows where the Llama3-v1 column is already filled
-        if not pd.isna(row['Llama3-v1']):
-            continue
+def extract_hyperlinks(pdf_path):
+    """
+    Extract hyperlinks from the PDF and return a mapping of {page_number: [list of target pages]}
+    """
+    doc = fitz.open(pdf_path)
+    link_map = {}
 
-        # Call mistral.qa2 and measure time taken
-        start_time = time.process_time()
-        output = mistral.qa2(f"{filename}.pdf", question)  # Assuming filename includes .pdf
-        end_time = time.process_time()
+    for page_no in range(len(doc)):
+        page = doc[page_no]
+        links = page.get_links()
         
-        # Parse the output
-        parsed_output = parse_output(output)
+        for link in links:
+            if "page" in link:  # Internal PDF link
+                target_page = link["page"]  # PDF pages are 0-indexed in PyMuPDF
+                if target_page > 0:  # Ignore links pointing to page 1
+                    if target_page not in link_map:
+                        link_map[target_page] = []
+                    link_map[target_page].append(page_no + 1)  # Store actual page numbers (1-indexed)
 
-        # Update the DataFrame
-        df.at[idx, 'Llama3-v1'] = parsed_output
-        df.at[idx, 'time taken'] = end_time - start_time
-        df.at[idx, 'token len'] = len(parsed_output.split())
+    return link_map
 
-    return df
+def extract_text_from_page(pdf_path, page_number):
+    """
+    Extract text from a specific page in the PDF
+    """
+    with open(pdf_path, "rb") as file:
+        reader = PyPDF2.PdfReader(file)
+        if page_number <= len(reader.pages):
+            page_text = reader.pages[page_number - 1].extract_text()
+            return page_text if page_text else ""
+    return ""
 
-# Example usage
-# Assuming `df` is your DataFrame with the specified columns
-df = process_dataframe(df)
+def get_top_keywords(text, top_n=10):
+    """
+    Process text, remove stopwords, and return top N most frequent keywords
+    """
+    words = re.findall(r'\b[a-z]+\b', text.lower())
+    filtered_words = [word for word in words if word not in stopwords.words("english")]
+    top_keywords = Counter(filtered_words).most_common(top_n)
+    return top_keywords
+
+if __name__ == "__main__":
+    pdf_path = "sample.pdf"  # Replace with your PDF file path
+
+    # Step 1: Extract hyperlinks and their target pages
+    link_map = extract_hyperlinks(pdf_path)
+    
+    # Step 2: Extract keywords for each linked page
+    keywords_by_page = {}
+    
+    for target_page, source_pages in link_map.items():
+        text = extract_text_from_page(pdf_path, target_page)
+        if text:
+            keywords = get_top_keywords(text)
+            keywords_by_page[target_page] = keywords
+
+    # Step 3: Print results
+    print("Top Keywords for Pages Linked in the PDF:")
+    for target_page, keywords in keywords_by_page.items():
+        print(f"\nPage {target_page} (Linked from pages: {link_map[target_page]}):")
+        for word, freq in keywords:
+            print(f"  {word}: {freq}")
