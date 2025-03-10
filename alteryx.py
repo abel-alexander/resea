@@ -1,43 +1,64 @@
 import fitz  # PyMuPDF
-import pytesseract
-from pdf2image import convert_from_path
 import re
 
-def extract_text_with_ocr(pdf_path):
+def extract_toc_from_pdf(pdf_path):
     doc = fitz.open(pdf_path)
     
-    toc_text = []
-    found_toc = False
-    end_text = "BofA SECURITIES"  # Expected end marker
+    # Extract text from the first page
+    first_page = doc[0].get_text("text")
+    
+    # Keep only text after "Table of Contents"
+    match = re.search(r"Table of Contents(.*)", first_page, re.DOTALL)
+    if not match:
+        return []  # Return empty list if no ToC found
+    toc_text = match.group(1).strip()  # Extract text after "Table of Contents"
 
+    # Split into lines and process ToC structure
+    toc_list = []
+    for line in toc_text.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        
+        # Determine hierarchy level (1 = main, 2 = sub-section)
+        if re.match(r"^\d+\.", line):  # Level 1 (e.g., "1. Recent Earnings")
+            level = 1
+        elif re.match(r"^[ivxlc]+\.", line, re.IGNORECASE):  # Level 2 (e.g., "i. Q1 2024")
+            level = 2
+        else:
+            continue  # Skip unstructured text
+
+        # Clean section name
+        section_name = re.sub(r"^\d+\.|\bi\b\.|\bii\b\.|\biii\b\.|\biv\b\.", "", line).strip()
+
+        # Add entry (page number to be filled later)
+        toc_list.append([level, section_name, None])
+
+    # Extract page numbers using get_links()
+    link_map = {}  # {section_name: page_number}
     for page in doc:
-        text = page.get_text("text")  # Extract selectable text
-        if "Table of Contents" in text:
-            found_toc = True
-        
-        if found_toc:
-            toc_text.append(text)
-        
-        if end_text in text:  # Stop extracting after "BofA SECURITIES"
-            break
+        links = page.get_links()
+        for link in links:
+            if "page" in link:
+                page_number = link["page"] + 1  # Convert to 1-based index
+                rect = link.get("from", None)
+                if rect:
+                    # Extract text in link area to map section to page
+                    link_text = page.get_textbox(rect).strip()
+                    link_map[link_text] = page_number
 
-    extracted_text = "\n".join(toc_text).strip()
+    # Assign page numbers
+    for entry in toc_list:
+        section = entry[1]
+        if section in link_map:
+            entry[2] = link_map[section]
 
-    # If PyMuPDF didn't find BofA SECURITIES, use OCR
-    if end_text not in extracted_text:
-        print("Switching to OCR for full extraction...")
-        images = convert_from_path(pdf_path, first_page=0, last_page=2)  # Convert first few pages to images
-        ocr_text = ""
-        for img in images:
-            ocr_text += pytesseract.image_to_string(img) + "\n"
-
-        # Merge OCR and PyMuPDF results (remove duplicates)
-        if "Table of Contents" in ocr_text:
-            extracted_text = ocr_text  # Use OCR if it has more content
-
-    return extracted_text
+    return toc_list
 
 # Example usage
 pdf_path = "your_file.pdf"
-extracted_text = extract_text_with_ocr(pdf_path)
-print(extracted_text)  # Now process this further for ToC extraction
+toc_output = extract_toc_from_pdf(pdf_path)
+
+# Print structured output
+for item in toc_output:
+    print(item)  # Example: [1, 'Recent Earnings Material', 2]
