@@ -13,6 +13,9 @@ def extract_toc_from_pdf(pdf_path):
         return []  # No ToC found
     toc_text = match.group(1).strip()
 
+    # Fix newline issue by merging lines properly
+    toc_text = re.sub(r"(\d+\.|[ivxlc]+\.)\n", r"\1 ", toc_text, flags=re.IGNORECASE)
+
     # Split into lines and extract structure
     toc_list = []
     for line in toc_text.split("\n"):
@@ -29,7 +32,8 @@ def extract_toc_from_pdf(pdf_path):
             continue  # Skip unrelated text
 
         # Clean section name
-        section_name = re.sub(r"^\d+\.|\bi\b\.|\bii\b\.|\biii\b\.|\biv\b\.", "", line).strip()
+        section_name = re.sub(r"^\d+\.", "", line).strip()  # Remove numbering
+        section_name = re.sub(r"^[ivxlc]+\.", "", section_name, re.IGNORECASE).strip()  # Remove Roman numerals
 
         # Add to ToC list (page number to be mapped later)
         toc_list.append([level, section_name, None])
@@ -38,7 +42,7 @@ def extract_toc_from_pdf(pdf_path):
     first_page_links = doc[0].get_links()
     page_numbers = [int(link["page"]) + 1 for link in first_page_links if "page" in link]
 
-    # Assign page numbers in order of appearance
+    # Assign page numbers sequentially (no matching needed)
     for i in range(min(len(toc_list), len(page_numbers))):
         toc_list[i][2] = page_numbers[i]
 
