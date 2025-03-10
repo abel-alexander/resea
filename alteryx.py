@@ -46,6 +46,10 @@ def extract_toc_from_pdf(pdf_path):
     for i in range(min(len(toc_list), len(page_numbers))):
         toc_list[i][2] = page_numbers[i]
 
+        # If the next item is a sub-item, assign it the same page number
+        if i + 1 < len(toc_list) and toc_list[i + 1][0] == 2:  # Check if next item is a sub-section
+            toc_list[i + 1][2] = toc_list[i][2]
+
     return toc_list
 
 # Example usage
