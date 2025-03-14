@@ -15,17 +15,18 @@ def get_level1_from_toc(pdf_path):
     return valid_level1_sections
 
 def clean_text(ocr_text):
-    """Cleans OCR text by removing unwanted sections and normalizing spacing."""
+    """Cleans OCR text while preserving structure (avoiding early newline removal)."""
     match = re.search(r"Table of Contents(.*)", ocr_text, re.DOTALL)
     if not match:
         return ""  # No valid text found
     text = match.group(1).strip()
 
-    # Remove unwanted text (logos, artifacts, extra symbols)
+    # Remove unwanted text (logos, artifacts)
     text = re.sub(r"Zz.*?ZH", "", text, flags=re.DOTALL | re.IGNORECASE)  # Remove OCR logo artifacts
     text = re.sub(r"[^a-zA-Z0-9\s.\n-]", "", text)  # Remove non-alphanumeric artifacts
-    text = re.sub(r"\n+", "\n", text).strip()  # Normalize spacing
-    text = re.sub(r"\n\n?\(", "\n", text)  # Remove artifacts before company names
+
+    # Preserve single newlines but remove excessive ones
+    text = re.sub(r"\n{2,}", "\n", text).strip()  # Remove excessive empty lines but keep structure
 
     return text
 
@@ -46,7 +47,7 @@ def extract_toc_hybrid(pdf_path, ocr_text):
 
         # If it's in section_list, assign it as Level 2 under current Level 1
         if line in section_list:
-            if current_level1:  # Ensure a Level 1 is assigned before adding Level 2
+            if current_level1:  # Ensure Level 1 is assigned before adding Level 2
                 toc_list.append([2, line, None])  # Assign as Level 2 under current Level 1
         
         # If it's not in section_list, treat it as a new Level 1
@@ -57,11 +58,3 @@ def extract_toc_hybrid(pdf_path, ocr_text):
 
     return toc_list
 
-
-
-# Extract structured ToC
-toc_output = extract_toc_hybrid(pdf_path, ocr_text)
-
-# Print structured output
-for item in toc_output:
-    print(item)  # Example: [1, 'Nike, Inc. Class B', None]  [2, 'Earnings Report', None]
