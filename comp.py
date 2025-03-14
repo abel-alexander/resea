@@ -1,32 +1,45 @@
-from nltk.tag import StanfordNERTagger
-import os
+import nltk
 import re
+from nltk import word_tokenize, pos_tag, ne_chunk
 
-# Set paths to Stanford NER model and jar file
-stanford_classifier = "stanford_ner/classifiers/english.all.3class.distsim.crf.ser.gz"
-stanford_ner_path = "stanford_ner/stanford-ner.jar"
+# Download necessary NLTK models (Run this once)
+nltk.download("punkt")
+nltk.download("maxent_ne_chunker")
+nltk.download("words")
 
-# Initialize StanfordNERTagger
-st = StanfordNERTagger(stanford_classifier, stanford_ner_path, encoding="utf-8")
-
-def extract_companies_stanford(ocr_text):
-    """Uses Stanford NER via NLTK to extract company names."""
+def extract_companies_nltk(ocr_text):
+    """Uses NLTK's NER chunking to extract company names (ORG entities)."""
     # Remove excessive newlines
     text = re.sub(r"\n+", " ", ocr_text).strip()
 
-    # Tokenize text
-    words = text.split()
+    # Tokenize & POS tagging
+    words = word_tokenize(text)
+    pos_tags = pos_tag(words)
 
-    # Apply Stanford NER
-    tagged_words = st.tag(words)
+    # Named entity recognition
+    named_entities = ne_chunk(pos_tags)
 
-    # Extract company names
-    company_names = [word for word, tag in tagged_words if tag == "ORGANIZATION"]
+    # Extract company names (ORG labels)
+    company_names = []
+    for chunk in named_entities:
+        if hasattr(chunk, "label") and chunk.label() == "ORGANIZATION":
+            company_names.append(" ".join(c[0] for c in chunk))
 
     return list(set(company_names))  # Remove duplicates
 
+# Example OCR text
+ocr_text = """
+Public Information Book March 2024 Table of Contents
+Birkenstock 6. Nike Earnings Report Earnings Transcript Research
+Deckers 7. On Holding Earnings Report Earnings Transcript Research
+Levi Strauss & Skechers Earnings Report Earnings Transcript Research
+Lululemon Earnings Report Earnings Transcript Research
+VF Corp Earnings Report Earnings Transcript Research
+Moncler Earnings Report Earnings Transcript Research
+"""
+
 # Detect company names
-company_names = extract_companies_stanford(ocr_text)
+company_names = extract_companies_nltk(ocr_text)
 
 # Print extracted company names
 print(company_names)
