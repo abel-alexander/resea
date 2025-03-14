@@ -5,11 +5,14 @@ import re
 section_list = ["Earnings Report", "Earnings Transcript", "Research", "Equity Research", "Earnings Call"]
 
 def get_level1_from_toc(pdf_path):
-    """Extract Level 1 titles from the default PDF ToC."""
+    """Extract Level 1 titles from the default PDF ToC, ignoring irrelevant pages."""
     doc = fitz.open(pdf_path)
     toc = doc.get_toc()
-    level1_sections = [entry[1] for entry in toc if entry[0] == 1]  # Extract only Level 1
-    return level1_sections
+    
+    # Remove any Level 1 sections that come from irrelevant pages (like '0.0 PIB Cover')
+    valid_level1_sections = [entry[1] for entry in toc if entry[0] == 1 and not entry[1].lower().startswith(("0.0", "cover", "public information book"))]
+
+    return valid_level1_sections
 
 def clean_text(ocr_text):
     """Cleans OCR text by removing unwanted sections and normalizing spacing."""
