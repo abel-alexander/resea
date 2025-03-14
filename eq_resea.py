@@ -1,60 +1,45 @@
-import pandas as pd
-import re
+import fitz  # PyMuPDF
 
-def extract_qa_data(log_file_path):
-    qa_data = []
-    current_email = None
-    current_question = None
-    current_answer = None
-    collecting_answer = False
+def get_page_numbers_from_links(pdf_path, toc_page):
+    """Extracts page numbers from hyperlinks on the ToC page."""
+    doc = fitz.open(pdf_path)
+    links = doc[toc_page].get_links()
+    
+    # Extract page numbers from valid links
+    page_numbers = sorted([int(link["page"]) + 1 for link in links if "page" in link])  # Convert to 1-based indexing
 
-    # Timestamp pattern (YYYY-MM-DD HH:MM:SS,XXX)
-    timestamp_pattern = re.compile(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})')
+    print("\n🔹 Extracted Page Numbers from Links:", page_numbers)  # Debugging
+    return page_numbers
 
-    with open(log_file_path, 'r', encoding='utf-8') as file:
-        lines = file.readlines()
+def assign_page_numbers(toc_list, page_numbers):
+    """Assigns page numbers to Level 1 and Level 2 sections correctly."""
+    page_index = 0  # Tracks which page number to assign
 
-    for i, line in enumerate(lines):
-        # Detect if the line starts with a timestamp
-        timestamp_match = timestamp_pattern.match(line)
-        
-        # Detect QA question line
-        qa_match = re.search(r'([\w\.-]+@[\w\.-]+).*?qa:\s*(.+)', line, re.IGNORECASE)
-        if qa_match and timestamp_match:
-            # Store previous QA pair if one exists
-            if current_email and current_question and current_answer:
-                qa_data.append([current_email, current_question, current_answer.strip()])
+    for i in range(len(toc_list)):
+        if toc_list[i][0] == 1:  # If it's a Level 1 section
+            if page_index < len(page_numbers):  # Ensure page number exists
+                toc_list[i][2] = page_numbers[page_index]  # Assign page number
+                parent_page = page_numbers[page_index]  # Store for Level 2
+                page_index += 1  # Move to the next page number
             
-            # Start new question
-            current_email = qa_match.group(1)
-            current_question = qa_match.group(2).strip()
-            current_answer = ""
-            collecting_answer = False  # Reset answer collection
+        elif toc_list[i][0] == 2:  # If it's a Level 2 section
+            toc_list[i][2] = parent_page  # Inherit page number from Level 1
 
-        # Find first `inference:result` **after** a question (this line must have a timestamp)
-        if "inference:result" in line and timestamp_match and current_question and not collecting_answer:
-            collecting_answer = True  # Start collecting answer
-            continue  # Move to next line to start answer collection
+    print("\n✅ Final Structured ToC with Page Numbers:")
+    for item in toc_list:
+        print(item)  # Debug output
+    
+    return toc_list
 
-        # Collect answer lines until another timestamp appears
-        if collecting_answer:
-            if timestamp_match:  # Stop collecting when a new timestamp is detected
-                collecting_answer = False
-                continue
-            current_answer += line.strip() + " "
 
-    # Append the last QA pair if valid
-    if current_email and current_question and current_answer:
-        qa_data.append([current_email, current_question, current_answer.strip()])
+pdf_path = "sd.pdf"
+toc_page = 0  # Assuming the ToC is on the first page
 
-    # Convert to DataFrame
-    df = pd.DataFrame(qa_data, columns=["Email", "Question", "Answer"])
-    return df
+# Extract structured ToC
+toc_list = extract_toc_hybrid(pdf_path, ocr_text)
 
-# Usage
-log_file_path = "path/to/your/logfile.txt"  # Replace with actual file path
-df = extract_qa_data(log_file_path)
+# Get page numbers from hyperlinks
+page_numbers = get_page_numbers_from_links(pdf_path, toc_page)
 
-# Display extracted data
-import ace_tools as tools
-tools.display_dataframe_to_user(name="QA Data", dataframe=df)
+# Assign page numbers to ToC entries
+final_toc = assign_page_numbers(toc_list, page_numbers)
