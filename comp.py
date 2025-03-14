@@ -1,11 +1,5 @@
 import re
-import nltk
-from nltk import word_tokenize, pos_tag, ne_chunk
-
-# Ensure necessary NLTK data is downloaded
-nltk.download("punkt")
-nltk.download("maxent_ne_chunker")
-nltk.download("words")
+import collections
 
 def clean_text(ocr_text):
     """Removes unwanted sections and extracts only relevant content."""
@@ -15,47 +9,56 @@ def clean_text(ocr_text):
         return ""  # No valid text found
     text = match.group(1).strip()
 
-    # Remove unwanted logo-based text (e.g., "BofA SECURITIES")
+    # Remove unwanted text from logos (e.g., "BofA SECURITIES")
     text = re.sub(r"BofA SECURITIES.*", "", text, flags=re.IGNORECASE)
 
-    # Remove section names ("Earnings Report", "Earnings Transcript", "Research")
-    sections_to_remove = ["Earnings Report", "Earnings Transcript", "Research"]
-    for section in sections_to_remove:
-        text = re.sub(rf"\b{section}\b", "", text, flags=re.IGNORECASE)
+    # Remove non-text artifacts (e.g., unwanted symbols, extra spaces)
+    text = re.sub(r"[^a-zA-Z0-9\s.\n-]", "", text)
 
-    # Remove excessive whitespace and newlines
-    text = re.sub(r"\n+", " ", text).strip()
+    # Normalize spacing
+    text = re.sub(r"\n+", "\n", text).strip()
     
     return text
 
-def extract_companies_nltk(cleaned_text):
-    """Uses NLTK's NER chunking to extract company names while preserving order."""
-    words = word_tokenize(cleaned_text)
-    pos_tags = pos_tag(words)
-    named_entities = ne_chunk(pos_tags)
+def extract_toc_structure(cleaned_text):
+    """Extracts companies as Level 1 and assigns repeating subsections as Level 2 dynamically."""
+    lines = cleaned_text.split("\n")
+    toc_list = []
+    level_1_sections = []  # Store unique company names
+    level_2_counts = collections.Counter()  # Count occurrences of each potential subsection
 
-    company_names = []
-    for chunk in named_entities:
-        if hasattr(chunk, "label") and chunk.label() == "ORGANIZATION":
-            company_names.append(" ".join(c[0] for c in chunk))
+    # First pass: Identify unique company names and count repeating subsections
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
 
-    return company_names  # Maintain order
+        if re.match(r"^\d+\.", line):  # Detect Level 1 (company names)
+            section_name = re.sub(r"^\d+\.", "", line).strip()
+            level_1_sections.append(section_name)
+        else:
+            level_2_counts[line] += 1  # Count occurrences of potential subsections
 
-# Example OCR text
-ocr_text = """
-Public Information Book March 2024 Table of Contents
-Birkenstock 6. Nike Earnings Report Earnings Transcript Research
-Deckers 7. On Holding Earnings Report Earnings Transcript Research
-Levi Strauss & Skechers Earnings Report Earnings Transcript Research
-Lululemon Earnings Report Earnings Transcript Research
-VF Corp Earnings Report Earnings Transcript Research
-Moncler Earnings Report Earnings Transcript Research
-BofA SECURITIES zh Nike
-"""
+    # Identify the most common subsection names (they repeat for multiple companies)
+    subsection_threshold = len(level_1_sections) // 2  # Subsections must appear in at least 50% of companies
+    level_2_sections = {sec for sec, count in level_2_counts.items() if count >= subsection_threshold}
 
-# Clean and extract company names
+    # Second pass: Assign sections correctly
+    level_1_index = 1
+    for company in level_1_sections:
+        toc_list.append([1, company, None])  # Add company as Level 1
+
+        for subsection in level_2_sections:  # Assign detected subsections under each company
+            toc_list.append([2, subsection, None])
+
+    return toc_list
+
+
+
+# Clean and extract structured ToC
 cleaned_text = clean_text(ocr_text)
-company_names = extract_companies_nltk(cleaned_text)
+toc_output = extract_toc_structure(cleaned_text)
 
-# Print extracted company names
-print(company_names)
+# Print structured ToC output
+for item in toc_output:
+    print(item)  # Example: [1, 'Birkenstock', None]  [2, 'Earnings Report', None]
