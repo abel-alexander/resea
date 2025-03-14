@@ -44,16 +44,16 @@ def extract_toc_hybrid(pdf_path, ocr_text):
         if not line:
             continue
 
-        # If line is a Level 2 section, assign it under the current Level 1
-        if line in section_list and current_level1:
-            toc_list.append([2, line, None])  # Assign as Level 2 under the current Level 1
+        # If it's in section_list, assign it as Level 2 under current Level 1
+        if line in section_list:
+            if current_level1:  # Ensure a Level 1 is assigned before adding Level 2
+                toc_list.append([2, line, None])  # Assign as Level 2 under current Level 1
         
-        else:
-            # If a new non-section_list item appears, it should be a new Level 1
-            if level1_index < len(level1_sections):
-                current_level1 = level1_sections[level1_index]
-                toc_list.append([1, current_level1, None])  # Assign new Level 1
-                level1_index += 1  # Move to the next Level 1 in ToC
+        # If it's not in section_list, treat it as a new Level 1
+        elif level1_index < len(level1_sections):
+            current_level1 = level1_sections[level1_index]  # Assign new Level 1
+            toc_list.append([1, current_level1, None])  
+            level1_index += 1  # Move to next Level 1
 
     return toc_list
 
