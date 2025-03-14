@@ -58,6 +58,7 @@ def extract_toc_hybrid(pdf_path, ocr_text):
     return toc_list
 
 
+
 # Extract structured ToC
 toc_output = extract_toc_hybrid(pdf_path, ocr_text)
 
