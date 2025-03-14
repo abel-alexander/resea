@@ -14,22 +14,29 @@ def get_page_numbers_from_links(pdf_path, toc_page):
 def assign_page_numbers(toc_list, page_numbers):
     """Assigns page numbers to Level 1 and Level 2 sections correctly."""
     page_index = 0  # Tracks which page number to assign
+    last_level1_page = None  # Store the last assigned Level 1 page
 
     for i in range(len(toc_list)):
         if toc_list[i][0] == 1:  # If it's a Level 1 section
             if page_index < len(page_numbers):  # Ensure page number exists
                 toc_list[i][2] = page_numbers[page_index]  # Assign page number
-                parent_page = page_numbers[page_index]  # Store for Level 2
+                last_level1_page = page_numbers[page_index]  # Store for first Level 2
                 page_index += 1  # Move to the next page number
-            
+
         elif toc_list[i][0] == 2:  # If it's a Level 2 section
-            toc_list[i][2] = parent_page  # Inherit page number from Level 1
+            if toc_list[i-1][0] == 1:  
+                toc_list[i][2] = last_level1_page  # First Level 2 gets same page as Level 1
+            else:
+                if page_index < len(page_numbers):  # Ensure page number exists
+                    toc_list[i][2] = page_numbers[page_index]
+                    page_index += 1  # Move to next available page number
 
     print("\n✅ Final Structured ToC with Page Numbers:")
     for item in toc_list:
         print(item)  # Debug output
     
     return toc_list
+
 
 
 pdf_path = "sd.pdf"
