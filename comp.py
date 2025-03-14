@@ -37,16 +37,17 @@ def extract_toc_hybrid(pdf_path, ocr_text):
     lines = cleaned_text.split("\n")
     toc_list = []
     current_level1 = None
-    level1_index = 0  # To track which Level 1 we're processing
+    level1_index = 0  # Track Level 1 sections
 
     for line in lines:
         line = line.strip()
         if not line:
             continue
 
-        # Ignore anything that is not in section_list unless it's a Level 1
+        # If line is a Level 2 section, assign it under the current Level 1
         if line in section_list and current_level1:
             toc_list.append([2, line, None])  # Assign as Level 2 under the current Level 1
+        
         else:
             # If a new non-section_list item appears, it should be a new Level 1
             if level1_index < len(level1_sections):
@@ -55,7 +56,6 @@ def extract_toc_hybrid(pdf_path, ocr_text):
                 level1_index += 1  # Move to the next Level 1 in ToC
 
     return toc_list
-
 
 
 # Extract structured ToC
