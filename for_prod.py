@@ -6,8 +6,8 @@ input_file_path = "usagelog.txt"
 # List of PIB names to check against
 pib_list = ["PIB Document 1", "PIB Report Q3", "Annual PIB Summary"]  # Expand as needed
 
-# Regex to detect lines that start with a timestamp (YYYY-MM-DD HH:MM:SS)
-timestamp_pattern = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?,\s*([^,]+),.*?sum:@")
+# Updated regex to correctly capture timestamp + username
+timestamp_pattern = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+,\s*[^,]+,\s*([^,]+),.*?sum:@")
 
 # Read file into memory
 with open(input_file_path, "r", encoding="utf-8", errors="ignore") as infile:
@@ -32,7 +32,7 @@ for line in lines:
             data.append([timestamp, user_name, pib_name, "\n".join(current_summary)])
 
         # Extract new summary metadata
-        timestamp, user_name = match.groups()
+        timestamp, user_name = match.groups()  # Correctly extract the username now
         pib_name = ""  # Reset PIB name
         current_summary = [line]  # Store first line
         capture = True  # Start capturing
