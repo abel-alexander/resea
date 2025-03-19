@@ -6,11 +6,8 @@ input_file_path = "usagelog.txt"
 # List of PIB names to check against
 pib_list = ["Starbucks", "Snap", "Tesla", "Walmart"]  # Expand as needed
 
-# Updated regex to correctly capture timestamp + username
-timestamp_pattern = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+,\s*[^,]+,\s*([^,]+),.*?sum:@")
-
-# Pattern to remove "sum:@:len-{num}:" from summary start
-remove_pattern = re.compile(r"sum:@:len-\d+:\s*")
+# Regex to correctly capture timestamp, username, and length
+timestamp_pattern = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+,\s*[^,]+,\s*([^,]+),.*?sum:@:len-(\d+):?(.*)?")
 
 # Read file into memory
 with open(input_file_path, "r", encoding="utf-8", errors="ignore") as infile:
@@ -22,6 +19,8 @@ capture = False
 current_summary = []
 timestamp = ""
 user_name = ""
+summary_length = 0
+section_name = ""
 pib_name = ""  # Default PIB name is empty
 
 for line in lines:
@@ -32,12 +31,14 @@ for line in lines:
     if match:
         # If capturing a previous summary, save it
         if capture and current_summary:
-            # **REMOVE FIRST LINE** before saving summary
-            cleaned_summary = remove_pattern.sub("", "\n".join(current_summary[1:]))  # Skip the first line
-            data.append([timestamp, user_name, pib_name, cleaned_summary.strip()])
+            # Remove the first line before saving summary
+            cleaned_summary = "\n".join(current_summary[1:]).strip()
+            data.append([timestamp, user_name, summary_length, section_name, pib_name, cleaned_summary])
 
         # Extract new summary metadata
-        timestamp, user_name = match.groups()  # Correctly extract the username now
+        timestamp, user_name, summary_length, section_name = match.groups()
+        summary_length = int(summary_length)  # Convert length to integer
+        section_name = section_name.strip() if section_name else ""  # Ensure clean section name
         pib_name = ""  # Reset PIB name
         current_summary = [line]  # Store first line (to be removed later)
         capture = True  # Start capturing
@@ -45,9 +46,9 @@ for line in lines:
     # If another timestamp appears and we were capturing, store the previous summary
     elif re.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", line):
         if capture and current_summary:
-            # **REMOVE FIRST LINE** before saving summary
-            cleaned_summary = remove_pattern.sub("", "\n".join(current_summary[1:]))  # Skip the first line
-            data.append([timestamp, user_name, pib_name, cleaned_summary.strip()])
+            # Remove the first line before saving summary
+            cleaned_summary = "\n".join(current_summary[1:]).strip()
+            data.append([timestamp, user_name, summary_length, section_name, pib_name, cleaned_summary])
         capture = False  # Stop capturing
         current_summary = []  # Reset buffer
 
@@ -62,11 +63,14 @@ for line in lines:
 
 # Save the last summary if still in capture mode
 if capture and current_summary:
-    cleaned_summary = remove_pattern.sub("", "\n".join(current_summary[1:]))  # Skip the first line
-    data.append([timestamp, user_name, pib_name, cleaned_summary.strip()])
+    cleaned_summary = "\n".join(current_summary[1:]).strip()
+    data.append([timestamp, user_name, summary_length, section_name, pib_name, cleaned_summary])
 
 # Convert to Pandas DataFrame
-df = pd.DataFrame(data, columns=["Timestamp", "User Name", "PIB Name", "Summary Text"])
+df = pd.DataFrame(data, columns=["Timestamp", "User Name", "Length", "Section Name", "PIB Name", "Summary Text"])
+
+# **Remove duplicate summaries (keep first occurrence)**
+df = df.drop_duplicates(subset=["Summary Text"], keep="first").reset_index(drop=True)
 
 # Display DataFrame for verification
 import ace_tools as tools
