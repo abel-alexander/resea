@@ -1,72 +1,68 @@
-import fitz  # PyMuPDF
+import re
+import csv
 
-def pdf_get_toc_with_links(file_name):
-    doc = fitz.open(file_name)
-    toc_page_number = 2  # 3rd page (0-based index)
-    toc_page = doc[toc_page_number]
+input_file_path = "usagelog.txt"
+output_file_path = "filtered_summary.csv"
 
-    # Extract hyperlinks and text blocks from the ToC page
-    links = toc_page.get_links()
-    text_blocks = toc_page.get_text("blocks")
+# List of PIB names to check against
+pib_list = ["PIB Document 1", "PIB Report Q3", "Annual PIB Summary"]  # Add more as needed
 
-    plst = []  # Final output list
-    unique_entries = set()  # To prevent duplicates
+# Regex pattern to detect a datestamp + name line (assumes timestamp format "YYYY-MM-DD HH:MM:SS")
+datestamp_pattern = re.compile(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?,\s*([^,]+),\s*sum:@:len=(\d+)")
 
-    section_counter = ord('A')  # Counter for unknown sections
-    id_counter = 1
+# Read the file
+with open(input_file_path, "r", encoding="utf-8", errors="ignore") as infile:
+    lines = infile.readlines()
 
-    for link in links:
-        link_rect = fitz.Rect(link["from"])  # Get the hyperlink bounding box
-        destination_page = link["page"] + 1  # Convert to 1-indexed
+summaries = []
+capture = False
+current_summary = []
+timestamp = ""
+user_name = ""
+summary_length = 0
+pib_name = "No Match"  # Default PIB name if no match found
 
-        # Expand bounding box slightly to capture surrounding text
-        expanded_rect = link_rect + (-5, -2, 5, 2)
+for line in lines:
+    line = line.strip()  # Clean unnecessary spaces
 
-        matched_text = None
-        min_distance = float("inf")
+    # Detect the start of a summary block (datestamp + sum:@:len)
+    match = datestamp_pattern.search(line)
+    if match:
+        # If capturing a previous summary, store it before starting a new one
+        if capture and current_summary:
+            summaries.append([timestamp, user_name, summary_length, pib_name, "\n".join(current_summary)])
 
-        # Iterate over text blocks to find the closest match
-        for block in text_blocks:
-            text_rect = fitz.Rect(block[:4])  # Get text bounding box
-            if expanded_rect.intersects(text_rect):  # Check if expanded box intersects
-                # Select the closest text block
-                distance = abs(link_rect.y0 - text_rect.y0)
-                if distance < min_distance:
-                    matched_text = block[4].strip()
-                    min_distance = distance
+        # Extract new summary details
+        timestamp, user_name, summary_length = match.groups()
+        summary_length = int(summary_length)  # Convert length to integer
+        pib_name = "No Match"  # Reset PIB name for new summary
+        current_summary = [line]  # Store first line
+        capture = True  # Start capturing
 
-        # Assign a fallback name if no match is found
-        if not matched_text:
-            matched_text = f"Unknown Section {chr(section_counter)}"
-            section_counter += 1
+    # If another datestamp appears and we are capturing, store the previous summary and reset
+    elif datestamp_pattern.search(line):
+        if capture and current_summary:
+            summaries.append([timestamp, user_name, summary_length, pib_name, "\n".join(current_summary)])
+        capture = False  # Stop capturing
+        current_summary = []  # Reset buffer
 
-        # Avoid duplicates
-        entry_key = (matched_text, destination_page)
-        if entry_key in unique_entries:
-            continue  # Skip duplicate entries
-        unique_entries.add(entry_key)
+    # Continue capturing if inside a summary block
+    elif capture:
+        current_summary.append(line)
 
-        # Append result in plst format
-        plst.append({
-            "id": id_counter,
-            "lvl": 1,
-            "title": matched_text,
-            "pno_from": destination_page,
-            "pno_to": destination_page  # We will adjust this later
-        })
-        id_counter += 1
+        # Check if this line contains any PIB name from the list
+        for pib in pib_list:
+            if pib in line:
+                pib_name = pib  # Assign matching PIB name
 
-    # Fix pno_to to correctly span across pages
-    for i in range(len(plst)):
-        if i < len(plst) - 1:
-            plst[i]["pno_to"] = plst[i + 1]["pno_from"] - 1
-        else:
-            plst[i]["pno_to"] = doc.page_count  # Last entry spans till the end
+# Save the last summary if still in capture mode
+if capture and current_summary:
+    summaries.append([timestamp, user_name, summary_length, pib_name, "\n".join(current_summary)])
 
-    doc.close()
+# Write output to a CSV file
+with open(output_file_path, "w", encoding="utf-8", newline="") as outfile:
+    writer = csv.writer(outfile)
+    writer.writerow(["Timestamp", "User Name", "Length", "PIB Name", "Summary Text"])
+    writer.writerows(summaries)
 
-    # Print the final structured ToC
-    for entry in plst:
-        print(entry)
-
-    return plst
+print(f"Extracted summaries saved to {output_file_path}")
