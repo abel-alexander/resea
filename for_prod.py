@@ -9,6 +9,9 @@ pib_list = ["PIB Document 1", "PIB Report Q3", "Annual PIB Summary"]  # Expand a
 # Updated regex to correctly capture timestamp + username
 timestamp_pattern = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+,\s*[^,]+,\s*([^,]+),.*?sum:@")
 
+# Pattern to remove "sum:@:len-{num}:" from summary start
+remove_pattern = re.compile(r"sum:@:len-\d+:\s*")
+
 # Read file into memory
 with open(input_file_path, "r", encoding="utf-8", errors="ignore") as infile:
     lines = infile.readlines()
@@ -29,7 +32,8 @@ for line in lines:
     if match:
         # If capturing a previous summary, save it
         if capture and current_summary:
-            data.append([timestamp, user_name, pib_name, "\n".join(current_summary)])
+            cleaned_summary = remove_pattern.sub("", "\n".join(current_summary))  # Remove sum:@:len-{num}:
+            data.append([timestamp, user_name, pib_name, cleaned_summary.strip()])
 
         # Extract new summary metadata
         timestamp, user_name = match.groups()  # Correctly extract the username now
@@ -40,7 +44,8 @@ for line in lines:
     # If another timestamp appears and we were capturing, store the previous summary
     elif re.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", line):
         if capture and current_summary:
-            data.append([timestamp, user_name, pib_name, "\n".join(current_summary)])
+            cleaned_summary = remove_pattern.sub("", "\n".join(current_summary))  # Remove sum:@:len-{num}:
+            data.append([timestamp, user_name, pib_name, cleaned_summary.strip()])
         capture = False  # Stop capturing
         current_summary = []  # Reset buffer
 
@@ -55,7 +60,8 @@ for line in lines:
 
 # Save the last summary if still in capture mode
 if capture and current_summary:
-    data.append([timestamp, user_name, pib_name, "\n".join(current_summary)])
+    cleaned_summary = remove_pattern.sub("", "\n".join(current_summary))  # Remove sum:@:len-{num}:
+    data.append([timestamp, user_name, pib_name, cleaned_summary.strip()])
 
 # Convert to Pandas DataFrame
 df = pd.DataFrame(data, columns=["Timestamp", "User Name", "PIB Name", "Summary Text"])
