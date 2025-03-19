@@ -7,7 +7,7 @@ output_file_path = "filtered_summary.csv"
 # List of PIB names to check against
 pib_list = ["PIB Document 1", "PIB Report Q3", "Annual PIB Summary"]  # Add more as needed
 
-# Regex pattern to detect a datestamp + name line (assumes timestamp format "YYYY-MM-DD HH:MM:SS")
+# Regex pattern to detect the start of a summary block (timestamp, username, sum:@:len)
 datestamp_pattern = re.compile(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*?,\s*([^,]+),\s*sum:@:len=(\d+)")
 
 # Read the file
@@ -20,7 +20,7 @@ current_summary = []
 timestamp = ""
 user_name = ""
 summary_length = 0
-pib_name = "No Match"  # Default PIB name if no match found
+pib_name = ""  # Default PIB name is empty
 
 for line in lines:
     line = line.strip()  # Clean unnecessary spaces
@@ -35,7 +35,7 @@ for line in lines:
         # Extract new summary details
         timestamp, user_name, summary_length = match.groups()
         summary_length = int(summary_length)  # Convert length to integer
-        pib_name = "No Match"  # Reset PIB name for new summary
+        pib_name = ""  # Reset PIB name for new summary
         current_summary = [line]  # Store first line
         capture = True  # Start capturing
 
@@ -50,7 +50,7 @@ for line in lines:
     elif capture:
         current_summary.append(line)
 
-        # Check if this line contains any PIB name from the list
+        # Check if this line contains any PIB name from the list (but don't use it as a condition for extraction)
         for pib in pib_list:
             if pib in line:
                 pib_name = pib  # Assign matching PIB name
