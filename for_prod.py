@@ -4,7 +4,7 @@ import pandas as pd
 input_file_path = "usagelog.txt"
 
 # List of PIB names to check against
-pib_list = ["PIB Document 1", "PIB Report Q3", "Annual PIB Summary"]  # Expand as needed
+pib_list = ["Starbucks", "Snap", "Tesla", "Walmart"]  # Expand as needed
 
 # Updated regex to correctly capture timestamp + username
 timestamp_pattern = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+,\s*[^,]+,\s*([^,]+),.*?sum:@")
@@ -32,19 +32,21 @@ for line in lines:
     if match:
         # If capturing a previous summary, save it
         if capture and current_summary:
-            cleaned_summary = remove_pattern.sub("", "\n".join(current_summary))  # Remove sum:@:len-{num}:
+            # **REMOVE FIRST LINE** before saving summary
+            cleaned_summary = remove_pattern.sub("", "\n".join(current_summary[1:]))  # Skip the first line
             data.append([timestamp, user_name, pib_name, cleaned_summary.strip()])
 
         # Extract new summary metadata
         timestamp, user_name = match.groups()  # Correctly extract the username now
         pib_name = ""  # Reset PIB name
-        current_summary = [line]  # Store first line
+        current_summary = [line]  # Store first line (to be removed later)
         capture = True  # Start capturing
 
     # If another timestamp appears and we were capturing, store the previous summary
     elif re.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", line):
         if capture and current_summary:
-            cleaned_summary = remove_pattern.sub("", "\n".join(current_summary))  # Remove sum:@:len-{num}:
+            # **REMOVE FIRST LINE** before saving summary
+            cleaned_summary = remove_pattern.sub("", "\n".join(current_summary[1:]))  # Skip the first line
             data.append([timestamp, user_name, pib_name, cleaned_summary.strip()])
         capture = False  # Stop capturing
         current_summary = []  # Reset buffer
@@ -60,7 +62,7 @@ for line in lines:
 
 # Save the last summary if still in capture mode
 if capture and current_summary:
-    cleaned_summary = remove_pattern.sub("", "\n".join(current_summary))  # Remove sum:@:len-{num}:
+    cleaned_summary = remove_pattern.sub("", "\n".join(current_summary[1:]))  # Skip the first line
     data.append([timestamp, user_name, pib_name, cleaned_summary.strip()])
 
 # Convert to Pandas DataFrame
