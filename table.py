@@ -1,53 +1,31 @@
-import fitz  # PyMuPDF
-import re
-import json
+import chromadb
+from sentence_transformers import SentenceTransformer
 
-def extract_glossary(pdf_path):
-    """Extracts glossary acronyms and their definitions."""
-    glossary = {}
-    doc = fitz.open(pdf_path)
+# Load ChromaDB Persistent Client
+chroma_client = chromadb.PersistentClient(path="./chroma_glossary_db")
+collection = chroma_client.get_or_create_collection(name="valuation_framework")
+model = SentenceTransformer("all-mpnet-base-v2")
 
-    for page in doc:
-        text = page.get_text("text")
-        lines = text.split("\n")
+# Load extracted definitions
+with open("definition_chunks.json", "r") as f:
+    definition_chunks = json.load(f)
 
-        for line in lines:
-            match = re.match(r"^([A-Z0-9&/]+)\s*–\s*(.+)$", line.strip())  # Detect "ACRONYM – Definition"
-            if match:
-                acronym, definition = match.groups()
-                glossary[acronym] = definition.strip()
+# Index chunks in ChromaDB
+for i, chunk in enumerate(definition_chunks):
+    collection.add(
+        documents=[chunk],
+        metadatas=[{"category": "valuation"}],
+        ids=[f"val_chunk_{i}"]
+    )
 
-    return glossary
+print("✅ ChromaDB Indexing Complete!")
 
-def extract_definition_chunks(pdf_path):
-    """Extracts valuation framework text in smaller retrievable chunks."""
-    doc = fitz.open(pdf_path)
-    chunks = []
+def retrieve_from_chroma(query, n_results=3):
+    """Retrieves relevant chunks from ChromaDB."""
+    results = collection.query(query_texts=[query], n_results=n_results)
+    return [doc["documents"][0] for doc in results["documents"]] if results["documents"] else []
 
-    for page in doc:
-        text = page.get_text("text").strip()
-        paragraphs = text.split("\n\n")  # Split by paragraphs
-
-        for para in paragraphs:
-            if len(para) > 100:  # Avoid very short lines
-                chunks.append(para.strip())
-
-    return chunks
-
-# Paths to your PDFs
-glossary_pdf_path = "glossary.pdf"
-definition_pdf_path = "valuation_framework.pdf"
-
-# Extract glossary acronyms
-glossary_data = extract_glossary(glossary_pdf_path)
-definition_chunks = extract_definition_chunks(definition_pdf_path)
-
-# Save glossary as JSON
-with open("glossary.json", "w") as f:
-    json.dump(glossary_data, f, indent=4)
-
-# Save definitions for later indexing
-with open("definition_chunks.json", "w") as f:
-    json.dump(definition_chunks, f, indent=4)
-
-print("✅ Glossary and Definition File Extracted!")
+# Test retrieval
+query = "What is DCF valuation?"
+chroma_results = retrieve_from_chroma(query)
+print("\n🔹 ChromaDB Results:\n", chroma_results)
