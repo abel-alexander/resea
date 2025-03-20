@@ -1,31 +1,39 @@
-import chromadb
+import faiss
+import numpy as np
 from sentence_transformers import SentenceTransformer
 
-# Load ChromaDB Persistent Client
-chroma_client = chromadb.PersistentClient(path="./chroma_glossary_db")
-collection = chroma_client.get_or_create_collection(name="valuation_framework")
+# Load embeddings model
 model = SentenceTransformer("all-mpnet-base-v2")
 
 # Load extracted definitions
 with open("definition_chunks.json", "r") as f:
     definition_chunks = json.load(f)
 
-# Index chunks in ChromaDB
-for i, chunk in enumerate(definition_chunks):
-    collection.add(
-        documents=[chunk],
-        metadatas=[{"category": "valuation"}],
-        ids=[f"val_chunk_{i}"]
-    )
+# Encode definitions into vectors
+embeddings = model.encode(definition_chunks)
 
-print("✅ ChromaDB Indexing Complete!")
+# Create FAISS index
+dimension = embeddings.shape[1]
+index = faiss.IndexFlatL2(dimension)
+index.add(np.array(embeddings, dtype=np.float32))
 
-def retrieve_from_chroma(query, n_results=3):
-    """Retrieves relevant chunks from ChromaDB."""
-    results = collection.query(query_texts=[query], n_results=n_results)
-    return [doc["documents"][0] for doc in results["documents"]] if results["documents"] else []
+# Save FAISS index
+faiss.write_index(index, "faiss_glossary.index")
+with open("faiss_mapping.json", "w") as f:
+    json.dump(definition_chunks, f, indent=4)
+
+print("✅ FAISS Indexing Complete!")
+
+def retrieve_from_faiss(query, top_k=3):
+    """Retrieves relevant chunks from FAISS."""
+    query_embedding = model.encode([query])
+    _, indices = index.search(np.array(query_embedding, dtype=np.float32), top_k)
+    
+    with open("faiss_mapping.json", "r") as f:
+        stored_definitions = json.load(f)
+    
+    return [stored_definitions[i] for i in indices[0] if i < len(stored_definitions)]
 
 # Test retrieval
-query = "What is DCF valuation?"
-chroma_results = retrieve_from_chroma(query)
-print("\n🔹 ChromaDB Results:\n", chroma_results)
+faiss_results = retrieve_from_faiss(query)
+print("\n🔹 FAISS Results:\n", faiss_results)
