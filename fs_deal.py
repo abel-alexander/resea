@@ -1,99 +1,62 @@
-import fitz  # PyMuPDF
+import json
 
-def pdf_get_toc(file_name, max_title_length=15):
-    doc = fitz.open(file_name)
-    toc = doc.get_toc(simple=True)  # Extract original ToC
-    total_pages = doc.page_count
+# === Load glossary from JSON file ===
+with open("glossary.json", "r") as f:
+    glossary_data = json.load(f)
 
-    # Extract hyperlinks from page 3 (ToC page)
-    toc_page_number = 2  # 3rd page (0-based index)
-    toc_page = doc[toc_page_number]
-    links = toc_page.get_links()
-    print(links)
+# === Load full valuation framework from a text file ===
+with open("valuation_framework_full.txt", "r") as f:
+    valuation_framework_text = f.read()
 
-    # Collect linked pages
-    linked_pages = set()
-    for link in links:
-        if "page" in link and link["page"] is not None:
-            linked_pages.add(link["page"] + 1)  # Convert to 1-indexed
 
-    # If more than 3 hyperlinks exist, process them
-    hyperlink_check = len(linked_pages) > 3
+# === Helper: Expand acronyms in query ===
+def expand_query_with_glossary(query):
+    words = query.split()
+    expanded_words = []
 
-    plst = []  # Final output list
-    if hyperlink_check:
-        print("Inside hybrid ToC logic")
+    for word in words:
+        match = glossary_data.get(word.upper())
+        if match:
+            expanded_words.append(f"{word} ({match})")
+        else:
+            expanded_words.append(word)
 
-        # Create a ToC lookup dictionary {page_number: title}
-        toc_dict = {entry[2]: entry[1] for entry in toc if entry[2] > 0}
+    return " ".join(expanded_words)
 
-        section_counter = ord('A')  # For fallback sections (A, B, C, ...)
-        id_counter = 1
-        section_list = []
 
-        # Process only hyperlinked pages
-        for pno in sorted(linked_pages):
-            if pno in toc_dict and toc_dict[pno].strip():  # If valid title exists
-                title = toc_dict[pno]
-                # ✅ Shorten long titles
-                if len(title) > max_title_length:
-                    title = title[:max_title_length] + "..."
-            else:
-                # Assign a generic unknown section instead of extracting text
-                title = f"Unknown Section {chr(section_counter)}"
-                section_counter += 1
+# === Helper: Determine if the query is valuation-related ===
+def is_valuation_query(query):
+    valuation_keywords = {
+        "valuation", "discounted cash flow", "intrinsic value",
+        "terminal value", "multiple", "ebitda", "dcf"
+    }
 
-            section_list.append((id_counter, 1, title, pno))
-            id_counter += 1
+    query_lower = query.lower()
+    has_keyword = any(term in query_lower for term in valuation_keywords)
 
-        print(section_list)
+    words = query.split()
+    has_acronym = any(word.upper() in glossary_data for word in words)
 
-        # Fix `pno_to`
-        for i, (section_id, lvl, title, pno_from) in enumerate(section_list):
-            if i < len(section_list) - 1:
-                pno_to = section_list[i + 1][3] - 1  # One page before next section
-            else:
-                pno_to = total_pages  # Last section spans till the end
+    return has_acronym, has_keyword
 
-            plst.append({
-                "id": section_id,
-                "lvl": lvl,
-                "title": title,
-                "pno_from": pno_from,
-                "pno_to": pno_to,
-            })
 
+# === Main Function ===
+def get_context_from_query(query):
+    expanded_query = expand_query_with_glossary(query)
+    has_acronym, has_keyword = is_valuation_query(query)
+
+    if has_acronym:
+        source = "acronym_detected"
+        context = valuation_framework_text
+    elif has_keyword:
+        source = "valuation_keywords_detected"
+        context = valuation_framework_text
     else:
-        # Process standard ToC if hyperlinks aren't useful
-        toc_sorted = sorted(toc, key=lambda x: x[2])  # Sort by page number
-        id_counter = 1
+        source = "general_query"
+        context = None  # fallback to FAISS or other source
 
-        for i, (lvl, title, pno_from) in enumerate(toc_sorted):
-            if lvl >= 3:  # Ignore deep nested levels
-                continue
-
-            # ✅ Shorten long titles
-            if len(title) > max_title_length:
-                title = title[:max_title_length] + "..."
-
-            if i < len(toc_sorted) - 1:
-                pno_to = toc_sorted[i + 1][2] - 1
-            else:
-                pno_to = total_pages
-
-            plst.append({
-                "id": id_counter,
-                "lvl": lvl,
-                "title": title,
-                "pno_from": pno_from,
-                "pno_to": pno_to,
-            })
-            id_counter += 1
-
-    doc.close()
-
-    # Print the extracted Table of Contents
-    for entry in plst:
-        print(entry)
-
-    return plst  # Return the structured ToC as a list of dictionaries
+    return {
+        "query": expanded_query,
+        "context": context,
+        "source": source
+    }
