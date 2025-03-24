@@ -1,62 +1,39 @@
+# --- Setup: Load glossary and guideline (if not already done globally) ---
 import json
-
-# === Load glossary from JSON file ===
 with open("glossary.json", "r") as f:
     glossary_data = json.load(f)
 
-# === Load full valuation framework from a text file ===
 with open("valuation_framework_full.txt", "r") as f:
-    valuation_framework_text = f.read()
+    guideline_text = f.read()
 
 
-# === Helper: Expand acronyms in query ===
+# --- Step 1: Expand acronyms in the question ---
 def expand_query_with_glossary(query):
     words = query.split()
-    expanded_words = []
-
+    expanded = []
+    changed = False
     for word in words:
-        match = glossary_data.get(word.upper())
-        if match:
-            expanded_words.append(f"{word} ({match})")
+        upper = word.upper()
+        if upper in glossary_data:
+            expanded.append(f"{word} ({glossary_data[upper]})")
+            changed = True
         else:
-            expanded_words.append(word)
+            expanded.append(word)
+    return " ".join(expanded), changed
 
-    return " ".join(expanded_words)
 
-
-# === Helper: Determine if the query is valuation-related ===
+# --- Step 2: Determine if it's valuation-related ---
 def is_valuation_query(query):
-    valuation_keywords = {
-        "valuation", "discounted cash flow", "intrinsic value",
-        "terminal value", "multiple", "ebitda", "dcf"
-    }
-
-    query_lower = query.lower()
-    has_keyword = any(term in query_lower for term in valuation_keywords)
-
-    words = query.split()
-    has_acronym = any(word.upper() in glossary_data for word in words)
-
-    return has_acronym, has_keyword
+    valuation_keywords = {"valuation", "dcf", "ebitda", "discounted cash flow", "terminal value", "multiple"}
+    return any(kw in query.lower() for kw in valuation_keywords)
 
 
-# === Main Function ===
-def get_context_from_query(query):
-    expanded_query = expand_query_with_glossary(query)
-    has_acronym, has_keyword = is_valuation_query(query)
+# --- Apply logic ---
+expanded_question, was_expanded = expand_query_with_glossary(question)
+is_val_question = was_expanded or is_valuation_query(question)
 
-    if has_acronym:
-        source = "acronym_detected"
-        context = valuation_framework_text
-    elif has_keyword:
-        source = "valuation_keywords_detected"
-        context = valuation_framework_text
-    else:
-        source = "general_query"
-        context = None  # fallback to FAISS or other source
 
-    return {
-        "query": expanded_query,
-        "context": context,
-        "source": source
-    }
+if is_val_question:
+    prompt = get_qa_prompt(expanded_question, context_text, guideline_text)
+else:
+    prompt = get_qa_prompt(expanded_question, context_text)
