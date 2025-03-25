@@ -1,39 +1,60 @@
-from ultralyticsplus import YOLO
-import cv2
-import pytesseract
+import fitz  # PyMuPDF
+import re
 
-# Load the YOLO model
-model = YOLO('keremberke/yolov8s-table-extraction')
+def extract_toc_from_pdf(pdf_path):
+    doc = fitz.open(pdf_path)
+    first_page_text = doc[0].get_text("text")
 
-# Set model parameters
-model.overrides['conf'] = 0.25  # NMS confidence threshold
-model.overrides['iou'] = 0.45  # NMS IoU threshold
-model.overrides['agnostic_nms'] = False  # NMS class-agnostic
-model.overrides['max_det'] = 1000  # Maximum number of detections per image
+    # Try extracting text after "Table of Contents"
+    match = re.search(r"Table of Contents(.*)", first_page_text, re.DOTALL)
+    if match:
+        toc_text = match.group(1).strip()
+    else:
+        # Fallback: Start from the first numbered section like "1. Some Title"
+        match = re.search(r"\b1\.\s+.*", first_page_text, re.DOTALL)
+        if not match:
+            return []  # No ToC fallback found
+        toc_text = match.group(0).strip()
 
-# Path to the image
-image_path = 'page_0_image.png'
-image = cv2.imread(image_path)
+    # Merge broken lines (e.g., "1.\nTitle" → "1. Title")
+    toc_text = re.sub(r"(\d+\.|[ivxlc]+\.|[a-zA-Z][\.\)])\n", r"\1 ", toc_text, flags=re.IGNORECASE)
 
-# Perform inference
-results = model.predict(image_path)
+    # Split and process
+    toc_list = []
+    for line in toc_text.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
 
-# Loop through detected tables and extract fixed-width flat text
-for idx, box in enumerate(results[0].boxes.xyxy):
-    x1, y1, x2, y2 = map(int, box)  # Bounding box coordinates
-    cropped_table = image[y1:y2, x1:x2]  # Crop the table region
+        # Detect hierarchy level
+        if re.match(r"^\d+\.", line):            # e.g., "1. Title"
+            level = 1
+        elif re.match(r"^([ivxlc]+\.|[a-zA-Z][\.\)])", line, re.IGNORECASE):  # e.g., "a)", "b."
+            level = 2
+        else:
+            continue
 
-    # Convert to grayscale for better OCR
-    gray_table = cv2.cvtColor(cropped_table, cv2.COLOR_BGR2GRAY)
+        # Remove prefix (numbering/lettering)
+        section_name = re.sub(r"^(\d+\.\s*|[ivxlc]+\.\s*|[a-zA-Z][\.\)]\s*)", "", line, flags=re.IGNORECASE).strip()
 
-    # Use Tesseract OCR to extract text with table alignment
-    custom_config = r'--psm 6'  # Assumes a single block of text
-    extracted_text = pytesseract.image_to_string(gray_table, config=custom_config)
+        toc_list.append([level, section_name, None])
 
-    # Optionally, format the extracted text into a fixed-width layout
-    fixed_text = "\n".join(
-        ["{: <20} {: <10} {: <10}".format(*line.split()) for line in extracted_text.split("\n") if line.strip()]
-    )
+    # Map page numbers from links
+    first_page_links = doc[0].get_links()
+    page_numbers = [int(link["page"]) + 1 for link in first_page_links if "page" in link]
 
-    # Print the formatted fixed-width text
-    print(f"Fixed-width text from table {idx + 1}:\n{fixed_text}")
+    # Assign page numbers
+    page_index = 0
+    for i in range(len(toc_list)):
+        if toc_list[i][0] == 1:
+            if page_index < len(page_numbers):
+                toc_list[i][2] = page_numbers[page_index]
+                page_index += 1
+            if i + 1 < len(toc_list) and toc_list[i + 1][0] == 2:
+                toc_list[i + 1][2] = toc_list[i][2]
+        elif toc_list[i][0] == 2 and toc_list[i][2] is None:
+            if page_index < len(page_numbers):
+                toc_list[i][2] = page_numbers[page_index]
+                page_index += 1
+
+    return toc_list
