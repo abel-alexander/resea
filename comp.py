@@ -1,88 +1,75 @@
-import fitz  # PyMuPDF
 import re
+from typing import List, Dict
 
-# Predefined Level 2 section list
-section_list = ["Earnings Report", "Earnings Transcript", "Research", "Equity Research", "Earnings Call"]
-
-def get_level1_from_toc(pdf_path):
-    """Extract Level 1 titles from the default PDF ToC, ignoring irrelevant pages."""
-    doc = fitz.open(pdf_path)
-    toc = doc.get_toc()
+def extract_section_metadata_from_markdown(md_text: str, toc: List[List]) -> List[Dict]:
+    """
+    Extract section metadata from a markdown string using TOC info.
     
-    # Remove irrelevant Level 1 sections (like '0.0 PIB Cover')
-    valid_level1_sections = [entry[1] for entry in toc if entry[0] == 1 and not entry[1].lower().startswith(("0.0", "cover", "public information book"))]
-
-    print("\n🔹 Level 1 Sections Extracted from ToC:")
-    for item in valid_level1_sections:
-        print(f"   - {item}")
+    Parameters:
+    - md_text: Full markdown text as a string (from .md file)
+    - toc: List of [level, section_title, start_page]
     
-    return valid_level1_sections
-
-def clean_text(ocr_text):
-    """Cleans OCR text while preserving structure (avoiding early newline removal)."""
-    print("\n🟢 Raw Extracted OCR Text:\n", ocr_text)  # Debug raw OCR text
-    
-    match = re.search(r"Table of Contents(.*)", ocr_text, re.DOTALL)
-    if not match:
-        print("❌ No valid Table of Contents found in OCR text.")
-        return ""
-
-    text = match.group(1).strip()
-
-    # Remove unwanted text (logos, artifacts)
-    text = re.sub(r"Zz.*?ZH", "", text, flags=re.DOTALL | re.IGNORECASE)  # Remove OCR logo artifacts
-    text = re.sub(r"[^a-zA-Z0-9\s.\n-]", "", text)  # Remove non-alphanumeric artifacts
-
-    # Preserve single newlines but remove excessive ones
-    text = re.sub(r"\n{2,}", "\n", text).strip()  # Remove excessive empty lines but keep structure
-
-    print("\n🟢 Cleaned OCR Text (after preprocessing):\n", text)  # Debug cleaned OCR text
-    
-    return text
-
-def extract_toc_hybrid(pdf_path, ocr_text):
-    """Uses PDF ToC + OCR text to extract structured sections."""
-    level1_sections = get_level1_from_toc(pdf_path)  # Get valid Level 1s
-    cleaned_text = clean_text(ocr_text)
-
-    lines = cleaned_text.split("\n")
-    toc_list = []
-    current_level1 = None
-    level1_index = 0  # Track Level 1 sections
-
-    print("\n🔹 Processing Lines from OCR Text:")
-    for line in lines:
-        line = line.strip()
-        if not line:
+    Returns:
+    - List of dicts with section metadata: title, subtitle, page_count, creation_date
+    """
+    # Split markdown into pages based on metadata-inferred page numbers
+    pages = md_text.split("\n\nPage ")  # assumes "Page X" exists at start or inline
+    page_map = {}
+    for page_block in pages:
+        lines = page_block.strip().splitlines()
+        if not lines:
             continue
+        first_line = lines[0]
+        match = re.match(r"(?:Page\s+)?(\d+)", first_line)
+        if match:
+            page_num = int(match.group(1))
+            page_map[page_num] = lines
 
-        print(f"  🔍 Checking Line: {line}")  # Debug each line
+    enriched = []
 
-        # If it's in section_list, assign it as Level 2 under current Level 1
-        if line in section_list:
-            if current_level1:  # Ensure Level 1 is assigned before adding Level 2
-                toc_list.append([2, line, None])  # Assign as Level 2 under current Level 1
-                print(f"  ✅ Assigned as Level 2 under '{current_level1}': {line}")
-        
-        # If it's not in section_list, treat it as a new Level 1
-        elif level1_index < len(level1_sections):
-            current_level1 = level1_sections[level1_index]  # Assign new Level 1
-            toc_list.append([1, current_level1, None])  
-            print(f"  🔷 Assigned as Level 1: {current_level1}")
-            level1_index += 1  # Move to next Level 1
+    # Date pattern supporting many formats including "3rd August, 2025"
+    date_pattern = re.compile(
+        r'(\b\d{1,2}(st|nd|rd|th)?\s+\w+,\s+\d{4}\b|'     # 3rd August, 2025
+        r'\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|'             # 23/04/2024
+        r'\b\d{4}[/-]\d{1,2}[/-]\d{1,2}\b|'               # 2024-04-23
+        r'\b\w+\s\d{1,2},\s\d{4}\b|'                      # April 23, 2024
+        r'\b\d{1,2}\s\w+\s\d{4}\b|'                       # 23 April 2024
+        r'\b\w+\s\d{4}\b)',                               # April 2024
+        re.IGNORECASE
+    )
 
-    print("\n✅ Final Structured Output:")
-    for item in toc_list:
-        print(item)  # Show final output
-    
-    return toc_list
+    for i, (level, section, start_page) in enumerate(toc):
+        end_page = toc[i + 1][2] - 1 if i + 1 < len(toc) else max(page_map.keys())
+        page_count = max(1, end_page - start_page + 1)
 
-# Example us
+        lines = page_map.get(start_page, [])
+        lines = [line.strip() for line in lines if len(line.strip()) > 3]
 
-# Extract structured ToC
-toc_output = extract_toc_hybrid(pdf_path, ocr_text)
+        # Title = first long or meaningful line
+        title, subtitle = "", ""
+        for idx, line in enumerate(lines[:20]):
+            if len(line.split()) >= 5 or len(line) >= 40:
+                title = line
+                if idx + 1 < len(lines):
+                    subtitle = lines[idx + 1]
+                break
+        if not title:
+            title = lines[0] if lines else ""
+            subtitle = lines[1] if len(lines) > 1 else ""
 
-# Print structured output
-print("\n🔹 Structured ToC Output:")
-for item in toc_output:
-    print(item)  # Example: [1, 'Nike, Inc. Class B', None]  [2, 'Earnings Report', None]
+        # Creation date: only first match
+        joined_top = " ".join(lines[:20])
+        match = date_pattern.search(joined_top)
+        creation_date = match.group(0) if match else ""
+
+        enriched.append({
+            "level": level,
+            "section": section,
+            "page_start": start_page,
+            "page_count": page_count,
+            "title": title,
+            "subtitle": subtitle,
+            "creation_date": creation_date
+        })
+
+    return enriched
