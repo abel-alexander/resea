@@ -2,113 +2,89 @@ import fitz  # PyMuPDF
 import re
 from typing import List, Dict
 
-def get_enhanced_section_metadata(pdf_path: str, toc: List[List]) -> List[Dict]:
+def extract_section_metadata_from_text(pdf_path: str, toc: List[List]) -> List[Dict]:
     """
-    Enrich TOC entries with:
-      - page_start and page_count (based on next section's start)
-      - bold_title: grouped lines from the top of the start page that have large font sizes (within 70% of the maximum)
-      - subtitle: the first line after the title block
-      - creation_date: a date extracted (from formats such as "23/04/2024", "2024-04-23", "April 23, 2024", "23 April 2024", or "April 2024")
+    For each TOC entry, extract:
+    - start_page (from toc)
+    - page_count (based on next toc entry)
+    - title (first meaningful line)
+    - subtitle (second line)
+    - creation_date (from top 20 lines via regex)
     
     Parameters:
-      pdf_path (str): Path to the PDF file.
-      toc (List[List]): TOC entries in the format [level, section_title, start_page].
+    - pdf_path (str): Path to the PDF
+    - toc (List[List]): TOC entries like [level, section_name, start_page]
     
     Returns:
-      List[Dict]: List of enriched metadata for each section.
+    - List[Dict]: Enriched metadata for each section
     """
     doc = fitz.open(pdf_path)
     num_pages = len(doc)
-    enriched_toc = []
+    enriched = []
 
-    # Extended date regex pattern supporting multiple common formats.
+    # Date pattern including formats like '3rd August, 2025'
     date_pattern = re.compile(
-        r'(\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|'   # e.g., 23/04/2024 or 23-04-2024
-        r'\b\d{4}[/-]\d{1,2}[/-]\d{1,2}\b|'       # e.g., 2024-04-23
-        r'\b\w+\s\d{1,2},\s\d{4}\b|'              # e.g., April 23, 2024
-        r'\b\d{1,2}\s\w+\s\d{4}\b|'               # e.g., 23 April 2024
-        r'\b\w+\s\d{4}\b)'                       # e.g., April 2024
-        r'\b\d{1,2}(st|nd|rd|th)?\s+\w+,\s+\d{4}\b
-
-        , re.IGNORECASE
+        r'(\b\d{1,2}(st|nd|rd|th)?\s+\w+,\s+\d{4}\b|'             # 3rd August, 2025
+        r'\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|'                     # 23/04/2024 or 23-04-2024
+        r'\b\d{4}[/-]\d{1,2}[/-]\d{1,2}\b|'                       # 2024-04-23
+        r'\b\w+\s\d{1,2},\s\d{4}\b|'                              # April 23, 2024
+        r'\b\d{1,2}\s\w+\s\d{4}\b|'                               # 23 April 2024
+        r'\b\w+\s\d{4}\b)',                                       # April 2024
+        re.IGNORECASE
     )
 
-    for i, entry in enumerate(toc):
-        level, section_title, start_page = entry
-        start_page_idx = start_page - 1
-
-        # Calculate page_count using next section's start (if any)
-        end_page_idx = num_pages - 1
+    for i, (level, section, start_page) in enumerate(toc):
+        start_idx = start_page - 1
+        end_idx = num_pages - 1
         for j in range(i + 1, len(toc)):
-            next_start_idx = toc[j][2] - 1
-            if next_start_idx >= start_page_idx:
-                end_page_idx = next_start_idx - 1
+            next_start = toc[j][2] - 1
+            if next_start >= start_idx:
+                end_idx = next_start - 1
                 break
-        page_count = max(0, end_page_idx - start_page_idx + 1)
+        page_count = max(0, end_idx - start_idx + 1)
 
-        # Extract all lines (text and corresponding font sizes) from the start page.
-        page = doc[start_page_idx]
-        blocks = page.get_text("dict")["blocks"]
-        all_lines = []
-        for block in blocks:
-            if "lines" in block:
-                for line in block["lines"]:
-                    spans = line["spans"]
-                    if spans:
-                        line_text = " ".join(span["text"] for span in spans).strip()
-                        font_size = spans[0]["size"]
-                        if line_text:
-                            all_lines.append((line_text, font_size))
+        # Extract plain text lines from start page
+        page = doc[start_idx]
+        lines = page.get_text("text").splitlines()
+        lines = [line.strip() for line in lines if len(line.strip()) > 3]
 
-        # Determine the title block:
-        bold_title = ""
-        subtitle = ""
-        if all_lines:
-            max_font = max(size for _, size in all_lines)
-            threshold = max_font * 0.7  # Accept lines with at least 70% of the maximum font size
-            collected = []
-            for idx, (text, size) in enumerate(all_lines):
-                if size >= threshold:
-                    collected.append(text)
-                elif collected:
-                    # The first line that doesn't meet the threshold after collecting title lines is taken as subtitle.
-                    subtitle = text
-                    break
-            bold_title = " ".join(collected).strip()
+        title = lines[0] if len(lines) > 0 else ""
+        subtitle = lines[1] if len(lines) > 1 else ""
 
-        # Look for a date in the first 20 lines (or all if fewer)
-        joined_top_lines = " ".join([text for text, _ in all_lines[:20]])
-        date_match = date_pattern.search(joined_top_lines)
+        # Extract creation date from top 20 lines
+        text_top = " ".join(lines[:20])
+        date_match = date_pattern.search(text_top)
         creation_date = date_match.group(0) if date_match else ""
 
-        enriched_toc.append({
-            "section": section_title,
+        enriched.append({
+            "level": level,
+            "section": section,
             "page_start": start_page,
             "page_count": page_count,
-            "bold_title": bold_title,
+            "title": title,
             "subtitle": subtitle,
             "creation_date": creation_date
         })
 
-    return enriched_toc
-
+    return enriched
 import re
 
 def enrich_answer_with_source_metadata(answer: str, enriched_sections: list) -> str:
     """
-    Enriches a QA answer ending with 'SourceRef: XYZ' by appending structured metadata:
-    - section name
+    Detects 'SourceRef: XYZ' inside a QA answer and enriches it with metadata from matched section.
+    
+    New fields used:
     - page_start
     - page_count
-    - bold_title
-    - creation_date (new!)
+    - title
+    - creation_date
 
     Parameters:
-    - answer (str): The QA answer string
-    - enriched_sections (list): Output from get_enhanced_section_metadata()
+    - answer (str): Full answer string with 'SourceRef: XYZ' line
+    - enriched_sections (list): Output from extract_section_metadata_from_text()
 
     Returns:
-    - str: Modified answer with metadata appended after SourceRef
+    - str: Answer with enriched SourceRef metadata
     """
     match = re.search(r"SourceRef:\s*(.+)", answer)
     if not match:
@@ -124,9 +100,9 @@ def enrich_answer_with_source_metadata(answer: str, enriched_sections: list) -> 
                 f"(Section: {section['section']}, "
                 f"Page Start: {section['page_start']}, "
                 f"Page Count: {section['page_count']}, "
-                f"Title: {section['bold_title']}, "
+                f"Title: {section['title']}, "
                 f"Date: {section.get('creation_date', '')})"
             )
             return answer.replace(match.group(0), f"{match.group(0)} {meta}")
 
-    return answer  # fallback: unchanged
+    return answer  # fallback: unchanged if no match
