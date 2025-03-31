@@ -1,117 +1,85 @@
-import fitz  # PyMuPDF
+import fitz
+import re
+from typing import List, Dict
 
-# Load the PDF
-pdf_path = "Apparel_2PIB.pdf"
-doc = fitz.open(pdf_path)
+def extract_section_metadata_from_text(pdf_path: str, toc: List[List]) -> List[Dict]:
+    """
+    Enriches each TOC entry with:
+    - page_count (based on next section's different start page)
+    - title (boldest lines first, fallback to first 10 text lines, all joined with commas)
+    - subtitle (line after title block)
+    - creation_date (first date match from top 20 lines)
+    """
+    doc = fitz.open(pdf_path)
+    num_pages = len(doc)
+    enriched = []
 
-# Analyze the first page (assuming it contains the ToC)
-toc_page_number = 0  # Adjust if ToC spans multiple pages
-toc_page = doc[toc_page_number]
+    # Extended date regex supporting ordinal and common formats
+    date_pattern = re.compile(
+        r'(\b\d{1,2}(st|nd|rd|th)?\s+\w+,\s+\d{4}\b|'     # 3rd August, 2025
+        r'\b\w+\s\d{1,2}(st|nd|rd|th)?,\s+\d{4}\b|'        # August 3rd, 2025
+        r'\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|'              # 23/04/2024
+        r'\b\d{4}[/-]\d{1,2}[/-]\d{1,2}\b|'                # 2024-04-23
+        r'\b\w+\s\d{1,2},\s\d{4}\b|'                       # April 23, 2024
+        r'\b\d{1,2}\s\w+\s\d{4}\b|'                        # 23 April 2024
+        r'\b\w+\s\d{4}\b)',                                # April 2024
+        re.IGNORECASE
+    )
 
-# Extract lines of text
-lines = toc_page.get_text("text").split("\n")  # Get text line by line
+    for i, (level, section, start_page) in enumerate(toc):
+        start_idx = start_page - 1
 
-# Extract hyperlinks
-links = toc_page.get_links()  # Get all links on the ToC page
+        # Compute page_count up to next different start_page
+        end_idx = num_pages - 1
+        for j in range(i + 1, len(toc)):
+            next_start = toc[j][2] - 1
+            if next_start > start_idx:
+                end_idx = next_start - 1
+                break
+        page_count = max(1, end_idx - start_idx + 1)
 
-# Debug: Print lines and links to verify parsing
-print("Extracted Lines from ToC Page:")
-for line in lines:
-    print(f"- {line}")
+        page = doc[start_idx]
 
-print("\nExtracted Links:")
-for link in links:
-    print(link)
+        # ---- Collect lines from structured (span) text ----
+        blocks = page.get_text("dict")["blocks"]
+        span_lines = []
+        for block in blocks:
+            if "lines" in block:
+                for line in block["lines"]:
+                    line_text = " ".join([span["text"] for span in line["spans"]]).strip()
+                    font_size = line["spans"][0]["size"]
+                    if len(line_text) > 3:
+                        span_lines.append((line_text, font_size))
 
-# Parse the hierarchical structure
-toc_hierarchy = []  # List to store the parsed ToC structure
-current_company = None  # To track the current company
+        # Use boldest spans (font size ≥ 80% of max)
+        title_lines = []
+        if span_lines:
+            max_font = max(size for _, size in span_lines)
+            threshold = max_font * 0.8
+            title_lines = [text for text, size in span_lines if size >= threshold]
 
-for line in lines:
-    line = line.strip()
-    if not line:  # Skip empty lines
-        continue
-    if line.isdigit():  # Ignore pure numeric lines (e.g., list numbers)
-        continue
-    if not current_company or line.lower() in ["earnings report", "earnings transcript", "research"]:
-        if not line.lower() in ["earnings report", "earnings transcript", "research"]:
-            current_company = line  # Update the current company name
-        toc_hierarchy.append((current_company, line))  # Add subcategory under company
+        # Fallback to markdown-style first 10 lines if needed
+        if len(title_lines) < 3:
+            text_lines = page.get_text("text").splitlines()
+            text_lines = [line.strip() for line in text_lines if len(line.strip()) > 3]
+            title_lines = text_lines[:10]
 
-# Debug: Print parsed hierarchy
-print("\nParsed ToC Hierarchy:")
-for company, subcategory in toc_hierarchy:
-    print(f"{company} - {subcategory}")
+        title = ", ".join(title_lines)
+        subtitle = text_lines[10] if len(text_lines) > 10 else ""
 
-# Match hyperlinks to ToC structure
-new_toc = []
-for link, (company, subcategory) in zip(links, toc_hierarchy):
-    if "page" in link and link["page"] is not None:
-        destination_page = link["page"] + 1  # Convert to 1-indexed
-        new_toc.append((company, subcategory, destination_page))
+        # Detect first date in top 20 lines
+        top_text = " ".join(text_lines[:20])
+        date_match = date_pattern.search(top_text)
+        creation_date = date_match.group(0) if date_match else ""
 
-# Print the new ToC
-print("\nGenerated Table of Contents:")
-for company, subcategory, page in new_toc:
-    print(f"{company} - {subcategory}, Page {page}")
+        enriched.append({
+            "level": level,
+            "section": section,
+            "page_start": start_page,
+            "page_count": page_count,
+            "title": title,
+            "subtitle": subtitle,
+            "creation_date": creation_date
+        })
 
-# Optionally save the new ToC to a file
-with open("generated_toc.txt", "w") as output_file:
-    for company, subcategory, page in new_toc:
-        output_file.write(f"{company} - {subcategory}, Page {page}\n")
-
-# Close the document
-doc.close()
-
-
-
-
-
-
-
-
-
-import fitz  # PyMuPDF
-
-# Load the PDF
-pdf_path = "Public_Information_Book.pdf"
-doc = fitz.open(pdf_path)
-
-# Analyze the first page (assuming it contains the ToC)
-toc_page_number = 0  # Adjust if ToC spans multiple pages
-toc_page = doc[toc_page_number]
-
-# Extract hyperlinks and text blocks
-links = toc_page.get_links()  # Get all links on the page
-text_blocks = toc_page.get_text("blocks")  # Extract text with bounding boxes
-
-# Function to find text associated with a hyperlink
-def get_text_on_link(link_rect, text_blocks):
-    """Find the text that overlaps with the hyperlink rectangle."""
-    for block in text_blocks:
-        x0, y0, x1, y1, text, *rest = block  # Unpack the text block
-        # Check if the text block overlaps with the hyperlink rectangle
-        if (
-            link_rect[0] >= x0 and link_rect[2] <= x1 and  # Horizontal overlap
-            link_rect[1] >= y0 and link_rect[3] <= y1      # Vertical overlap
-        ):
-            return text.strip()  # Return the text in the hyperlink rectangle
-    return None
-
-# Iterate over links and find associated text
-link_texts = []
-for link in links:
-    if "from" in link and "page" in link and link["page"] is not None:
-        link_rect = link["from"]  # Get the hyperlink rectangle
-        destination_page = link["page"] + 1  # Convert to 1-indexed
-        associated_text = get_text_on_link(link_rect, text_blocks)
-        if associated_text:
-            link_texts.append((associated_text, destination_page))
-
-# Print the results
-print("Hyperlink Text and Page Number:")
-for text, page in link_texts:
-    print(f"{text}, Page {page}")
-
-# Close the document
-doc.close()
+    return enriched
