@@ -98,3 +98,62 @@ enriched_sections = get_section_titles_with_page_counts(pdf_path, toc)
 qa_answer = "The company's EPS trends are improving.\n\nSourceRef: Equity_Research_abc"
 enriched = enrich_answer_with_source_metadata(qa_answer, enriched_sections)
 print(enriched)
+
+
+import fitz  # PyMuPDF
+
+def get_section_titles_with_page_counts(pdf_path: str, toc: list) -> list:
+    """
+    Works for all TOC levels: every entry gets its page_start, page_count, and bold title,
+    even if multiple entries start on the same page.
+
+    Parameters:
+    - pdf_path (str): path to the PDF
+    - toc (list): [[level, title, start_page], ...]
+
+    Returns:
+    - list of dicts with section, page_start, page_count, bold_title
+    """
+    doc = fitz.open(pdf_path)
+    num_pages = len(doc)
+    enriched_toc = []
+
+    for i, entry in enumerate(toc):
+        level, title, start_page = entry
+        start_page_index = start_page - 1
+
+        # Look for next TOC entry to determine page range
+        end_page_index = num_pages - 1
+        for j in range(i + 1, len(toc)):
+            next_start_page = toc[j][2] - 1
+            if next_start_page >= start_page_index:
+                end_page_index = next_start_page - 1
+                break
+
+        page_count = max(0, end_page_index - start_page_index + 1)
+
+        # Extract largest text from the start page
+        page = doc[start_page_index]
+        blocks = page.get_text("dict")["blocks"]
+        max_font_size = 0
+        bold_title = ""
+
+        for block in blocks:
+            if "lines" not in block:
+                continue
+            for line in block["lines"]:
+                for span in line["spans"]:
+                    size = span.get("size", 0)
+                    text = span.get("text", "").strip()
+                    if size > max_font_size and len(text) > 5:
+                        max_font_size = size
+                        bold_title = text
+
+        enriched_toc.append({
+            "section": title,
+            "page_start": start_page,
+            "page_count": page_count,
+            "bold_title": bold_title
+        })
+
+    return enriched_toc
