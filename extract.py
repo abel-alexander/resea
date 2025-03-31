@@ -92,16 +92,41 @@ def get_enhanced_section_metadata(pdf_path: str, toc: List[List]) -> List[Dict]:
 
     return enriched_toc
 
-# --- Example Usage ---
-if __name__ == "__main__":
-    # Example TOC list: [level, section title, start page]
-    toc = [
-        [1, "Wall Street Research", 1091],
-        [2, "2024.04.23 - UBS Equities", 1491],
-        [2, "2024.04.23 - Wells Fargo Securities", 1661],
-    ]
-    pdf_path = "spotify.pdf"  # Replace with your actual PDF file path
+import re
 
-    enriched_sections = get_enhanced_section_metadata(pdf_path, toc)
-    for sec in enriched_sections:
-        print(sec)
+def enrich_answer_with_source_metadata(answer: str, enriched_sections: list) -> str:
+    """
+    Enriches a QA answer ending with 'SourceRef: XYZ' by appending structured metadata:
+    - section name
+    - page_start
+    - page_count
+    - bold_title
+    - creation_date (new!)
+
+    Parameters:
+    - answer (str): The QA answer string
+    - enriched_sections (list): Output from get_enhanced_section_metadata()
+
+    Returns:
+    - str: Modified answer with metadata appended after SourceRef
+    """
+    match = re.search(r"SourceRef:\s*(.+)", answer)
+    if not match:
+        return answer  # No SourceRef found
+
+    raw_source = match.group(1).strip()
+    clean_source = raw_source.replace("_", " ").lower()
+
+    for section in enriched_sections:
+        section_name = section["section"].strip().lower()
+        if section_name in clean_source:
+            meta = (
+                f"(Section: {section['section']}, "
+                f"Page Start: {section['page_start']}, "
+                f"Page Count: {section['page_count']}, "
+                f"Title: {section['bold_title']}, "
+                f"Date: {section.get('creation_date', '')})"
+            )
+            return answer.replace(match.group(0), f"{match.group(0)} {meta}")
+
+    return answer  # fallback: unchanged
