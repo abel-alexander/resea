@@ -157,3 +157,90 @@ def get_section_titles_with_page_counts(pdf_path: str, toc: list) -> list:
         })
 
     return enriched_toc
+
+
+import fitz  # PyMuPDF
+import re
+from typing import List, Dict
+
+def get_section_metadata_with_titles_and_dates(pdf_path: str, toc: List[List]) -> List[Dict]:
+    """
+    Enrich TOC entries with:
+      - page range
+      - bold title (largest font line or lines)
+      - subtitle (line below title if available)
+      - creation date (from top 8 lines)
+
+    Parameters:
+    - pdf_path (str): Path to the PDF file
+    - toc (List[List]): List of [level, section_title, start_page]
+
+    Returns:
+    - List[Dict]: Each enriched TOC entry
+    """
+    doc = fitz.open(pdf_path)
+    num_pages = len(doc)
+    enriched_toc = []
+
+    for i, entry in enumerate(toc):
+        level, section_title, start_page = entry
+        start_page_idx = start_page - 1
+
+        # --- Calculate page_count ---
+        end_page_idx = num_pages - 1
+        for j in range(i + 1, len(toc)):
+            next_start = toc[j][2] - 1
+            if next_start >= start_page_idx:
+                end_page_idx = next_start - 1
+                break
+        page_count = max(0, end_page_idx - start_page_idx + 1)
+
+        # --- Analyze the start page ---
+        page = doc[start_page_idx]
+        blocks = page.get_text("dict")["blocks"]
+        all_lines = []
+
+        for block in blocks:
+            if "lines" in block:
+                for line in block["lines"]:
+                    line_text = " ".join([span["text"] for span in line["spans"]]).strip()
+                    if line_text:
+                        all_lines.append((line_text, line["spans"][0]["size"]))
+
+        # --- Bold title: collect all lines with max font size ---
+        bold_title, subtitle = "", ""
+        if all_lines:
+            max_font = max(size for _, size in all_lines)
+            bold_lines = [text for text, size in all_lines if size == max_font]
+            bold_title = " ".join(bold_lines).strip()
+
+            try:
+                first_bold_idx = next(i for i, (text, size) in enumerate(all_lines) if size == max_font)
+                if first_bold_idx + 1 < len(all_lines):
+                    subtitle = all_lines[first_bold_idx + 1][0].strip()
+            except StopIteration:
+                subtitle = ""
+
+        # --- Creation date detection (regex on top 8 lines) ---
+        date_pattern = re.compile(
+            r'(\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|'               # 01/02/2023 or 1-2-2023
+            r'\b\d{4}[/-]\d{1,2}[/-]\d{1,2}\b|'                   # 2023-01-02
+            r'\b\w+\s\d{1,2},\s\d{4}\b)',                         # April 24, 2024
+            re.IGNORECASE
+        )
+        early_lines = " ".join([text for text, _ in all_lines[:8]])
+        date_match = date_pattern.search(early_lines)
+        creation_date = date_match.group(0) if date_match else ""
+
+        # --- Append enriched section ---
+        enriched_toc.append({
+            "section": section_title,
+            "page_start": start_page,
+            "page_count": page_count,
+            "bold_title": bold_title,
+            "subtitle": subtitle,
+            "creation_date": creation_date
+        })
+
+    return enriched_toc
+
