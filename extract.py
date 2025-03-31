@@ -28,6 +28,8 @@ def get_enhanced_section_metadata(pdf_path: str, toc: List[List]) -> List[Dict]:
         r'\b\w+\s\d{1,2},\s\d{4}\b|'              # e.g., April 23, 2024
         r'\b\d{1,2}\s\w+\s\d{4}\b|'               # e.g., 23 April 2024
         r'\b\w+\s\d{4}\b)'                       # e.g., April 2024
+        r'\b\d{1,2}(st|nd|rd|th)?\s+\w+,\s+\d{4}\b
+
         , re.IGNORECASE
     )
 
