@@ -1,41 +1,4 @@
-Perfect — thanks for the clarification. Let's walk through it cleanly:
 
----
-
-### ✅ Your Current Function — Summary
-
-It:
-- Extracts ToC by matching "Table of Contents"
-- Falls back to matching `1.` if ToC isn't found
-- Merges lines like `a)\nTitle`
-- Handles:
-  - `1.`, `i.`, `a)`, `b.` as hierarchy levels
-- Strips prefixes and maps page numbers
-
----
-
-### ✅ What's Missing
-
-From your current code:
-- It **doesn’t support bullets like `-`, `•`, or `–`**
-- Fallback match for `1.` fails if newline follows `1.` (you use `\s+`, which doesn’t catch newlines)
-- No normalization of bullet characters
-
----
-
-### ✅ Proposed Fix — Built On Your Version
-
-Here’s the final **drop-in** that:
-1. **Fixes the fallback to handle `1.\nTitle`**
-2. **Handles `a)`, `b.`, `-`, `•`, `–` as level 2**
-3. **Normalizes bullets**
-4. **Does not alter working logic you already had**
-
----
-
-### ✅ Final Updated Function (built strictly on your version)
-
-```python
 import fitz  # PyMuPDF
 import re
 
@@ -98,10 +61,4 @@ def extract_toc_from_pdf(pdf_path):
                 page_index += 1
 
     return toc_list
-```
 
----
-
-Let me know if you want:
-- Grouping under each section
-- To detect titles even without bullets or indexes (pure indentation or case-based)
