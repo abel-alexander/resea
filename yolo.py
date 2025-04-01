@@ -5,7 +5,7 @@ def extract_toc_from_pdf(pdf_path):
     doc = fitz.open(pdf_path)
     first_page_text = doc[0].get_text("text")
 
-    # Extract ToC or fallback
+    # Extract Table of Contents or fallback
     match = re.search(r"Table of Contents(.*)", first_page_text, re.DOTALL)
     if match:
         toc_text = match.group(1).strip()
@@ -15,42 +15,54 @@ def extract_toc_from_pdf(pdf_path):
             return []
         toc_text = "1. " + match.group(1).strip()
 
-    # Normalize bullets and dashes
-    toc_text = toc_text.replace("•", "[BULLET]").replace("–", "[HYPHEN]").replace("-", "[HYPHEN]")
+    # Normalize and fix broken lines like "•\nTitle"
+    toc_text = re.sub(r"([•\-])\n", r"\1 ", toc_text)
+    lines = [line.strip() for line in toc_text.split("\n") if line.strip()]
 
-    # Fix broken lines
-    toc_text = re.sub(r"(\d+\.|[ivxlc]+\.|[a-zA-Z][\.\)]|\[BULLET\]|\[HYPHEN\])\n", r"\1 ", toc_text, flags=re.IGNORECASE)
+    # Detect first marker to decide structure
+    level1_marker = None
+    for line in lines:
+        if line.startswith("• "):
+            level1_marker = "•"
+            break
+        elif line.startswith("- "):
+            level1_marker = "-"
+            break
 
+    # Parse lines using detected structure
     toc_list = []
-    last_level = None
-
-    for line in toc_text.split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-
-        # Detect structure
-        if line.startswith("[BULLET]"):
-            level = 1
-        elif line.startswith("[HYPHEN]"):
-            level = 2 if last_level == 1 else 1  # use context
-        elif re.match(r"^\d+\.", line):
-            level = 1
-        elif re.match(r"^[a-zA-Z][\.\)]", line):
-            level = 2
+    for line in lines:
+        if level1_marker == "•":
+            if line.startswith("• "):
+                level = 1
+                section_name = line[2:].strip()
+            elif line.startswith("- "):
+                level = 2
+                section_name = line[2:].strip()
+            else:
+                continue
+        elif level1_marker == "-":
+            if line.startswith("- "):
+                level = 1
+                section_name = line[2:].strip()
+            elif line.startswith("• "):
+                level = 2
+                section_name = line[2:].strip()
+            else:
+                continue
         else:
             continue
 
-        last_level = level
-
-        # Clean up prefix
-        section_name = re.sub(r"^(\[BULLET\]|\[HYPHEN\]|\d+\.\s*|[a-zA-Z][\.\)]\s*)", "", line, flags=re.IGNORECASE).strip()
         toc_list.append([level, section_name, None])
 
-    # Page number mapping
-    first_page_links = doc[0].get_links()
-    page_numbers = [int(link["page"]) + 1 for link in first_page_links if "page" in link]
+    # Extract page numbers from first-page links
+    page_numbers = [
+        int(link["page"]) + 1
+        for link in doc[0].get_links()
+        if "page" in link
+    ]
 
+    # Assign page numbers to TOC items
     page_index = 0
     for i in range(len(toc_list)):
         if toc_list[i][0] == 1:
@@ -65,4 +77,3 @@ def extract_toc_from_pdf(pdf_path):
                 page_index += 1
 
     return toc_list
-m
