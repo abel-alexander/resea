@@ -20,7 +20,7 @@ def extract_section_metadata_llm_title(pdf_path: str, toc: List[List], llm_pipel
     num_pages = len(doc)
     enriched = []
 
-    # Date regex (strict)
+    # Date regex (strict and well scoped)
     date_pattern = re.compile(
         r'('
         r'\b\d{1,2}(st|nd|rd|th)?\s+\w+,\s+\d{4}\b|'     # 3rd August, 2025
@@ -36,7 +36,7 @@ def extract_section_metadata_llm_title(pdf_path: str, toc: List[List], llm_pipel
     for i, (level, section, start_page) in enumerate(toc):
         start_idx = start_page - 1
 
-        # Compute page_count using next different start page
+        # Calculate page_count based on next section's start page
         end_idx = num_pages - 1
         for j in range(i + 1, len(toc)):
             next_start = toc[j][2] - 1
@@ -45,18 +45,16 @@ def extract_section_metadata_llm_title(pdf_path: str, toc: List[List], llm_pipel
                 break
         page_count = max(1, end_idx - start_idx + 1)
 
-        # Get page text
         page = doc[start_idx]
         page_text = page.get_text("text").strip()
 
-        # LLM prompt
+        # LLM Prompt to extract just the title
         prompt = (
             "From the page text below, extract the most important title or heading "
             "that best summarizes the section. Respond with:\n\nTitle: ...\n\n"
             f"---\n{page_text}"
         )
 
-        # Call LLM
         try:
             output = llm_pipeline(prompt, max_new_tokens=128, temperature=0.75, do_sample=False)
             result = output[0]['generated_text']
@@ -64,13 +62,13 @@ def extract_section_metadata_llm_title(pdf_path: str, toc: List[List], llm_pipel
             print(f"[ERROR] LLM failed for section '{section}' (page {start_page}): {e}")
             result = ""
 
-        # Parse title from LLM output
+        # Parse LLM output
         title = ""
         for line in result.splitlines():
             if line.lower().startswith("title:"):
                 title = line.split(":", 1)[-1].strip()
 
-        # Regex date from top 20 lines
+        # Get creation date from top 20 lines
         lines = page_text.splitlines()
         lines = [line.strip() for line in lines if len(line.strip()) > 3]
         top_text = " ".join(lines[:20])
