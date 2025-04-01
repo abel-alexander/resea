@@ -50,8 +50,21 @@ def extract_section_metadata_llm_title(pdf_path: str, toc: List[List], llm_pipel
 
         # LLM Prompt to extract just the title
         prompt = (
-            "From the page text below, extract the most important title or heading "
-            "that best summarizes the section. Respond with:\n\nTitle: ...\n\n"
+            "You are helping identify a meaningful section title from the start page of a company document.
+
+            From the following page text, extract a concise, human-readable title that best summarizes the section.
+            
+            - If there is an explicit report name or heading (e.g. 'Back in Black - Reiterate OW'), use it.
+            - If it's a regulatory document like 'Form 6-K', use that and any company name near it.
+            - Ignore metadata, disclaimers, and footnotes.
+            
+            Respond only in this format:
+            
+            Title: <clean title>
+            
+            ---
+            {text}
+            "
             f"---\n{page_text}"
         )
 
