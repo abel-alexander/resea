@@ -1,4 +1,3 @@
-
 import fitz  # PyMuPDF
 import re
 
@@ -6,39 +5,45 @@ def extract_toc_from_pdf(pdf_path):
     doc = fitz.open(pdf_path)
     first_page_text = doc[0].get_text("text")
 
-    # Try extracting text after "Table of Contents"
+    # Extract ToC or fallback
     match = re.search(r"Table of Contents(.*)", first_page_text, re.DOTALL)
     if match:
         toc_text = match.group(1).strip()
     else:
-        # Fallback: Start from the first numbered section like "1." even with newline after
         match = re.search(r"\b1\.\s*(.*)", first_page_text, re.DOTALL)
         if not match:
-            return []  # No ToC fallback found
+            return []
         toc_text = "1. " + match.group(1).strip()
 
-    # Normalize bullets/dashes
+    # Normalize bullets
     toc_text = toc_text.replace("•", "-").replace("–", "-")
 
-    # Merge broken lines like "a)\nTitle" or "-\nTitle"
+    # Fix newlines between index and title
     toc_text = re.sub(r"(\d+\.|[ivxlc]+\.|[a-zA-Z][\.\)]|-)\n", r"\1 ", toc_text, flags=re.IGNORECASE)
 
-    # Split and process
+    # Process lines
     toc_list = []
+    last_level = None
+
     for line in toc_text.split("\n"):
         line = line.strip()
         if not line:
             continue
 
-        # Detect hierarchy level
-        if re.match(r"^\d+\.", line):  # e.g., "1. Title"
+        # Determine hierarchy
+        if re.match(r"^\d+\.", line):  # 1. Main
             level = 1
-        elif re.match(r"^([ivxlc]+\.|[a-zA-Z][\.\)]|- )", line, re.IGNORECASE):  # e.g., "a)", "b.", "- Title"
+        elif re.match(r"^[a-zA-Z][\.\)]", line):  # a) Sub
             level = 2
+        elif re.match(r"^- ", line):
+            # Contextual logic: if last level was 1, this is level 2; else level 1
+            level = 2 if last_level == 1 else 1
         else:
             continue
 
-        # Remove prefix
+        last_level = level
+
+        # Clean prefix
         section_name = re.sub(r"^(\d+\.\s*|[ivxlc]+\.\s*|[a-zA-Z][\.\)]\s*|- )", "", line, flags=re.IGNORECASE).strip()
         toc_list.append([level, section_name, None])
 
@@ -61,4 +66,3 @@ def extract_toc_from_pdf(pdf_path):
                 page_index += 1
 
     return toc_list
-
