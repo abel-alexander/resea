@@ -1,40 +1,67 @@
-def expand_query_with_glossary(query):
-    """Check if the query contains an acronym and expand it."""
-    words = query.split()
-    expanded_words = []
+# === Convert raw table to markdown string ===
+def table_data_to_markdown(data: list[list]) -> str:
+    if not data or len(data) < 2:
+        return ""
+    header = data[0]
+    rows = data[1:]
+    lines = [" | ".join(header), " | ".join(["---"] * len(header))]
+    for row in rows:
+        if len(row) == len(header):
+            lines.append(" | ".join(row))
+    return "\n".join(lines)
 
-    for word in words:
-        glossary_match = retrieve_from_glossary(word)  # Check if word is in glossary
-        if glossary_match:
-            expanded_words.append(f"{word} ({glossary_match})")
-        else:
-            expanded_words.append(word)
+# === Rectify markdown table using LLM ===
+def rectify_table_with_llm(markdown_table: str, llm_pipeline, temperature=0.7, max_new_tokens=512) -> str:
+    prompt = f"""
+Below is a possibly broken markdown table extracted from a PDF. Please clean it up — fix misalignments, merged cells, or formatting issues, and return a corrected markdown table.
 
-    return " ".join(expanded_words)
+Original Table:
+{markdown_table}
+"""
+    response = llm_pipeline(
+        prompt,
+        temperature=temperature,
+        max_new_tokens=max_new_tokens,
+        do_sample=False,
+        return_full_text=False
+    )
+    return response[0]["generated_text"].strip()
 
+# === Parse markdown table into list of dicts ===
+def parse_markdown_table(markdown: str) -> list:
+    lines = [line.strip() for line in markdown.strip().split("\n") if line.strip()]
+    if len(lines) < 3:
+        return []
 
-def retrieve_from_faiss(query, top_k=3):
-    """Retrieves relevant chunks from FAISS (first glossary, then valuation framework)."""
-    expanded_query = expand_query_with_glossary(query)  # Expand query before retrieval
-    query_embedding = model.encode([expanded_query])
+    header = [h.strip() for h in lines[0].split("|") if h.strip()]
+    data_rows = []
+    for row in lines[2:]:
+        cells = [c.strip() for c in row.split("|") if c.strip()]
+        if len(cells) == len(header):
+            data_rows.append(dict(zip(header, cells)))
+    return data_rows
 
-    # First, check glossary FAISS index
-    _, glossary_indices = glossary_index.search(np.array(query_embedding, dtype=np.float32), top_k)
-    with open("faiss_glossary_mapping.json", "r") as f:
-        stored_glossary = json.load(f)
+# === Flatten table into readable markdown-style block ===
+def flatten_table_to_text(table_data: list) -> str:
+    if not table_data:
+        return ""
+    headers = list(table_data[0].keys())
+    rows = [headers] + [[row.get(h, "") for h in headers] for row in table_data]
+    table_text = "\n".join([" | ".join(row) for row in rows])
+    return f"Table Start\nTable Data:\n{table_text}\nTable End"
 
-    glossary_results = [stored_glossary[i] for i in glossary_indices[0] if i < len(stored_glossary)]
+# === Main loop to process and append to rs1 ===
+def process_plumber_tables_with_llm(tables: list, llm_pipeline, rs1: list):
+    for table in tables:
+        markdown = table_data_to_markdown(table['data'])
+        fixed_markdown = rectify_table_with_llm(markdown, llm_pipeline)
+        parsed_table = parse_markdown_table(fixed_markdown)
+        flattened_text = flatten_table_to_text(parsed_table)
 
-    # If glossary has an exact match, return only that
-    exact_glossary_match = retrieve_from_glossary(query)
-    if exact_glossary_match:
-        return [exact_glossary_match]  # Stop here if it's an acronym query
-
-    # Otherwise, check valuation framework
-    _, indices = val_index.search(np.array(query_embedding, dtype=np.float32), top_k)
-    with open("faiss_valuation_mapping.json", "r") as f:
-        stored_definitions = json.load(f)
-
-    valuation_results = [stored_definitions[i] for i in indices[0] if i < len(stored_definitions)]
-
-    return glossary_results + valuation_results
+        rs1.append({
+            'title': table['title'],
+            'page_no': table['page_number'],
+            'block_no_from': 0,
+            'block_no_to': 0,
+            'text': flattened_text
+        })
