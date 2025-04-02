@@ -1,92 +1,79 @@
-from pypdf import PdfReader
-import pandas as pd
+from langchain.document_loaders import UnstructuredFileLoader
+from transformers import pipeline
+from sentence_transformers import SentenceTransformer
 import re
 
-def extract_text_from_pdf(pdf_path: str) -> list:
-    """
-    Extracts raw text from a PDF file using PyPDF.
-    
-    Parameters:
-    - pdf_path: Path to the PDF file.
-    
-    Returns:
-    - List of strings, where each string is the text of a single page.
-    """
-    reader = PdfReader(pdf_path)
-    return [page.extract_text() for page in reader.pages]
+# === Settings ===
+llm = pipeline("text-generation", model="meta-llama/Meta-Llama-3-8B-Instruct", device=0)  # Or your model
+embedder = SentenceTransformer("all-mpnet-base-v2")
+rs = []  # Final result block list
 
-def detect_table_like_text(page_text: str) -> list:
-    """
-    Detects table-like text patterns in a given page text.
-    
-    Parameters:
-    - page_text: The raw text of a PDF page.
-    
-    Returns:
-    - List of strings, where each string is a detected table-like structure.
-    """
-    tables = []
-    lines = page_text.splitlines()
-    table_lines = []
-    
-    for line in lines:
-        # Heuristic: Lines with delimiters like `|`, `,`, or consistent whitespace
-        if re.search(r'[|,\t]', line) or len(re.findall(r'\s{2,}', line)) > 2:
-            table_lines.append(line)
-        elif table_lines:
-            # End of a table block
-            tables.append("\n".join(table_lines))
-            table_lines = []
-    
-    if table_lines:
-        tables.append("\n".join(table_lines))  # Add last table if it ends at the end of the page
-    
-    return tables
+# === Helper Functions ===
 
-def parse_table_to_dataframe(table_text: str) -> pd.DataFrame:
-    """
-    Parses table-like text into a pandas DataFrame.
-    
-    Parameters:
-    - table_text: The text of a detected table.
-    
-    Returns:
-    - A pandas DataFrame representing the table.
-    """
-    # Split lines and parse columns
-    lines = table_text.splitlines()
-    data = [re.split(r'[|,\t]', line.strip()) for line in lines if line.strip()]
-    
-    # Use the first row as the header if it looks like column names
-    if all(re.match(r'[a-zA-Z0-9]', col) for col in data[0]):
-        headers = data[0]
-        rows = data[1:]
-    else:
-        headers = [f"Column {i+1}" for i in range(len(data[0]))]
-        rows = data
-    
-    return pd.DataFrame(rows, columns=headers)
+def extract_table_with_llm(text: str) -> str:
+    prompt = f"""
+The following text was extracted from a financial document page. If any part of it looks like a table (even if broken), reconstruct it into a clean markdown table. If no table exists, reply with: No table found.
 
-def extract_tables_from_pdf(pdf_path: str) -> list:
-    """
-    Extracts tables from a PDF file and converts them into pandas DataFrames.
-    
-    Parameters:
-    - pdf_path: Path to the PDF file.
-    
-    Returns:
-    - List of pandas DataFrames, each representing a detected table.
-    """
-    pages = extract_text_from_pdf(pdf_path)
-    all_tables = []
+Text:
+{text}
 
-    for page_text in pages:
-        table_texts = detect_table_like_text(page_text)
-        for table_text in table_texts:
+Reconstructed Table (if any):
+"""
+    result = llm(prompt, max_new_tokens=512, do_sample=False)[0]["generated_text"]
+    return result.split("Reconstructed Table (if any):")[-1].strip()
+
+def is_valid_table(llm_output: str) -> bool:
+    return ("|" in llm_output and "---" in llm_output) or bool(re.search(r"\bYear\b.*\d{4}", llm_output))
+
+def parse_markdown_table(markdown: str) -> list:
+    lines = [line.strip() for line in markdown.strip().split("\n") if line.strip()]
+    if len(lines) < 3:
+        return []
+
+    header = [h.strip() for h in lines[0].split("|") if h.strip()]
+    data_rows = []
+
+    for row in lines[2:]:  # skip header + separator
+        cells = [c.strip() for c in row.split("|") if c.strip()]
+        if len(cells) == len(header):
+            data_rows.append(dict(zip(header, cells)))
+    return data_rows
+
+def flatten_table_to_text(table_data: list) -> str:
+    if not table_data:
+        return ""
+
+    headers = list(table_data[0].keys())
+    rows = [headers] + [[row.get(h, "") for h in headers] for row in table_data]
+
+    # Convert rows into readable text (Markdown-like format)
+    table_text = "\n".join([" | ".join(row) for row in rows])
+    return f"Table Start\nTable Data:\n{table_text}\nTable End"
+
+# === Main Pipeline ===
+
+def extract_llm_tables_to_rs(file_name: str):
+    loader = UnstructuredFileLoader(file_name)
+    docs = loader.load()
+
+    for idx, doc in enumerate(docs):
+        page_num = doc.metadata.get("page", idx + 1)
+        llm_output = extract_table_with_llm(doc.page_content)
+
+        if is_valid_table(llm_output):
             try:
-                df = parse_table_to_dataframe(table_text)
-                all_tables.append(df)
+                structured_data = parse_markdown_table(llm_output)
+                flattened_text = flatten_table_to_text(structured_data)
+
+                rs.append({
+                    'title': f'LLM-Detected Table Page {page_num}',
+                    'page_no': page_num,
+                    'block_no_from': 0,
+                    'block_no_to': 0,
+                    'text': flattened_text
+                })
+
             except Exception as e:
-                print(f"Error parsing table: {e}")
-    
-    return all_tables
+                print(f"⚠️ Error parsing table on page {page_num}: {e}")
+
+    return rs
