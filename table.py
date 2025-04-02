@@ -1,33 +1,4 @@
-# === Convert raw table to markdown string ===
-def table_data_to_markdown(data: list[list]) -> str:
-    if not data or len(data) < 2:
-        return ""
-    header = data[0]
-    rows = data[1:]
-    lines = [" | ".join(header), " | ".join(["---"] * len(header))]
-    for row in rows:
-        if len(row) == len(header):
-            lines.append(" | ".join(row))
-    return "\n".join(lines)
-
-# === Rectify markdown table using LLM ===
-def rectify_table_with_llm(markdown_table: str, llm_pipeline, temperature=0.7, max_new_tokens=512) -> str:
-    prompt = f"""
-Below is a possibly broken markdown table extracted from a PDF. Please clean it up — fix misalignments, merged cells, or formatting issues, and return a corrected markdown table.
-
-Original Table:
-{markdown_table}
-"""
-    response = llm_pipeline(
-        prompt,
-        temperature=temperature,
-        max_new_tokens=max_new_tokens,
-        do_sample=False,
-        return_full_text=False
-    )
-    return response[0]["generated_text"].strip()
-
-# === Parse markdown table into list of dicts ===
+# === Helper: Convert markdown table (string) to structured list of dicts ===
 def parse_markdown_table(markdown: str) -> list:
     lines = [line.strip() for line in markdown.strip().split("\n") if line.strip()]
     if len(lines) < 3:
@@ -41,7 +12,7 @@ def parse_markdown_table(markdown: str) -> list:
             data_rows.append(dict(zip(header, cells)))
     return data_rows
 
-# === Flatten table into readable markdown-style block ===
+# === Helper: Flatten parsed table to text for rs1 block ===
 def flatten_table_to_text(table_data: list) -> str:
     if not table_data:
         return ""
@@ -50,18 +21,56 @@ def flatten_table_to_text(table_data: list) -> str:
     table_text = "\n".join([" | ".join(row) for row in rows])
     return f"Table Start\nTable Data:\n{table_text}\nTable End"
 
-# === Main loop to process and append to rs1 ===
-def process_plumber_tables_with_llm(tables: list, llm_pipeline, rs1: list):
-    for table in tables:
-        markdown = table_data_to_markdown(table['data'])
-        fixed_markdown = rectify_table_with_llm(markdown, llm_pipeline)
-        parsed_table = parse_markdown_table(fixed_markdown)
-        flattened_text = flatten_table_to_text(parsed_table)
+# === LLM Extractor: Clean up a markdown block from one page ===
+def extract_and_structure_table_from_page(doc, llm_pipeline, temperature=0.7):
+    page_no = doc.metadata.get("page", 0)
+    prompt = f"""
+Below is text extracted from page {page_no} of a financial PDF.
+If there's a table in this text, reconstruct it cleanly as a markdown table.
+If not, reply with "No table found".
 
-        rs1.append({
-            'title': table['title'],
-            'page_no': table['page_number'],
-            'block_no_from': 0,
-            'block_no_to': 0,
-            'text': flattened_text
-        })
+{doc.page_content}
+"""
+    response = llm_pipeline(
+        prompt,
+        temperature=temperature,
+        max_new_tokens=1024,
+        do_sample=False,
+        return_full_text=False
+    )
+    return response[0]['generated_text'].strip()
+
+# === Master function: Use table page numbers from plumber, clean with LLM ===
+def refine_plumber_tables_with_llm(file_name, tables, llm_pipeline, rs1):
+    from pymupdf4llm import PyMuPDFLoader
+
+    # 1. Collect table page numbers from plumber
+    table_pages = sorted(set([table['page_number'] for table in tables]))
+
+    # 2. Extract clean markdown per page using pymupdf4llm
+    loader = PyMuPDFLoader(file_name)
+    page_docs = loader.load(page_chunks=True)
+
+    # 3. Filter only the pages where tables were found
+    target_docs = [doc for doc in page_docs if doc.metadata["page"] in table_pages]
+
+    # 4. Send those pages to LLM for table reconstruction
+    for doc in target_docs:
+        page_no = doc.metadata["page"]
+        raw_markdown = extract_and_structure_table_from_page(doc, llm_pipeline)
+
+        if "no table found" not in raw_markdown.lower():
+            try:
+                parsed_table = parse_markdown_table(raw_markdown)
+                flattened = flatten_table_to_text(parsed_table)
+
+                rs1.append({
+                    'title': f'LLM-Rectified Table Page {page_no}',
+                    'page_no': page_no,
+                    'block_no_from': 0,
+                    'block_no_to': 0,
+                    'text': flattened
+                })
+
+            except Exception as e:
+                print(f"⚠️ Failed to parse table on page {page_no}: {e}")
