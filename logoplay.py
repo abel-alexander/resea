@@ -1,20 +1,17 @@
-table_prompt = PromptTemplate(
-    input_variables=["page_no", "page_text"],
-    template="""
-You are an expert data cleaning assistant.
+def should_skip_page(markdown_text: str, min_words: int = 30, min_table_lines: int = 3) -> bool:
+    # Trim and check word count
+    word_count = len(markdown_text.strip().split())
+    if word_count < min_words:
+        print(f"⏭️ Skipping: too short ({word_count} words)")
+        return True
 
-The following text was extracted from page {page_no} of a financial report. It contains line-by-line structured data, not in table format.
+    # Check for table-like structure (at least N lines with numbers and 2+ tokens)
+    tableish_lines = [
+        line for line in markdown_text.splitlines()
+        if any(char.isdigit() for char in line) and len(line.split()) >= 2
+    ]
+    if len(tableish_lines) < min_table_lines:
+        print(f"⏭️ Skipping: not enough table-like lines ({len(tableish_lines)} found)")
+        return True
 
-Your task:
-- Identify all lines that follow a "label: value" or "label    value" pattern.
-- Reformat only that information into a markdown table using `|` to separate columns.
-- Use the label as the first column, and value as the second column.
-- Do not hallucinate or guess missing values or columns.
-- Do not add additional rows, headers, or formatting beyond what’s already in the text.
-- Preserve the original values exactly.
-- If no such lines exist, return exactly: No table found.
-
-Text:
-{page_text}
-"""
-)
+    return False
