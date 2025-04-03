@@ -1,18 +1,19 @@
-[System Instruction]
-You are a data structure specialist. Your task is to identify and reconstruct tabular data from markdown text that was extracted from PDFs, even when the table structure is broken, misaligned, or not properly formatted. Focus exclusively on data that represents tabular information.
+from langchain.prompts import PromptTemplate
 
-[Context]
-<markdown>
-{Insert your markdown text here}
-</markdown>
+table_prompt = PromptTemplate(
+    input_variables=["page_no", "page_text"],
+    template="""
+You are an expert at recovering table data from messy markdown.
 
-[Task]
-1. Carefully examine the provided markdown and identify ANY content that represents tabular data, even if poorly formatted, misaligned, or lacking proper table syntax.
-2. Reconstruct this data into a clean, properly formatted markdown table.
-3. Use contextual clues to determine column divisions and headers even when delimiter characters are missing or inconsistent.
-4. Preserve the exact data values without modifying content.
-5. Ignore all non-tabular text including paragraphs, explanations, headers, footers.
-6. If multiple data sets appear to be tables, format each separately and clearly label them.
-7. Only use information present in the input - do not hallucinate additional columns, rows, or data.
+Below is text extracted from page {page_no} of a financial PDF.
 
-Present your output as standard markdown tables using the | delimiter for columns and appropriate header separation.
+Your task:
+- Identify any content that visually resembles a table, even if misaligned or malformed.
+- Reconstruct it into a clean markdown table using the `|` delimiter.
+- Return ONLY markdown tables. Do not include any explanations, code blocks, or notes.
+- If no table is found, return exactly: No table found.
+
+Text:
+{page_text}
+"""
+)
