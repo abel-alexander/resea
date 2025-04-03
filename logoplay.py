@@ -1,46 +1,18 @@
-import cv2
-import numpy as np
-from ultralyticsplus import YOLO, render_result
-from PIL import Image
-import pytesseract  # OCR library
+[System Instruction]
+You are a data structure specialist. Your task is to identify and reconstruct tabular data from markdown text that was extracted from PDFs, even when the table structure is broken, misaligned, or not properly formatted. Focus exclusively on data that represents tabular information.
 
-# Load the YOLO model
-model = YOLO('keremberke/yolov8m-table-extraction')
+[Context]
+<markdown>
+{Insert your markdown text here}
+</markdown>
 
-# Set model parameters
-model.overrides['conf'] = 0.25  # NMS confidence threshold
-model.overrides['iou'] = 0.45  # NMS IoU threshold
-model.overrides['agnostic_nms'] = False  # NMS class-agnostic
-model.overrides['max_det'] = 1000  # maximum number of detections per image
+[Task]
+1. Carefully examine the provided markdown and identify ANY content that represents tabular data, even if poorly formatted, misaligned, or lacking proper table syntax.
+2. Reconstruct this data into a clean, properly formatted markdown table.
+3. Use contextual clues to determine column divisions and headers even when delimiter characters are missing or inconsistent.
+4. Preserve the exact data values without modifying content.
+5. Ignore all non-tabular text including paragraphs, explanations, headers, footers.
+6. If multiple data sets appear to be tables, format each separately and clearly label them.
+7. Only use information present in the input - do not hallucinate additional columns, rows, or data.
 
-# Set the image
-image_path = 'zidane.jpg'  # Replace with your local image path
-image = cv2.imread(image_path)  # Load the image as a numpy array
-
-# Perform inference
-results = model.predict(image)
-
-# Visualize results
-render = render_result(model=model, image=image, result=results[0])
-render.show()
-
-# Extract bounding boxes and text
-for box in results[0].boxes:
-    # Get bounding box coordinates
-    xyxy = box.xyxy.cpu().numpy().astype(int)  # Convert to integers
-    x_min, y_min, x_max, y_max = xyxy[0]
-
-    # Crop the detected region
-    cropped_region = image[y_min:y_max, x_min:x_max]
-
-    # Convert to PIL Image for OCR
-    pil_image = Image.fromarray(cv2.cvtColor(cropped_region, cv2.COLOR_BGR2RGB))
-
-    # Perform OCR using pytesseract
-    extracted_text = pytesseract.image_to_string(pil_image)
-
-    # Display the extracted text
-    print(f"Bounding Box: ({x_min}, {y_min}, {x_max}, {y_max})")
-    print("Extracted Text:")
-    print(extracted_text)
-    print("-" * 50)
+Present your output as standard markdown tables using the | delimiter for columns and appropriate header separation.
