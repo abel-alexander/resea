@@ -3,15 +3,16 @@ from langchain.prompts import PromptTemplate
 table_prompt = PromptTemplate(
     input_variables=["page_no", "page_text"],
     template="""
-You are an expert at recovering table data from messy markdown.
+You are an expert in financial data extraction.
 
-Below is text extracted from page {page_no} of a financial PDF.
+Below is noisy text from page {page_no} of a financial report. It may contain line-based data or visual columns that do not follow markdown table formatting.
 
-Your task:
-- Identify any content that visually resembles a table, even if misaligned or malformed.
-- Reconstruct it into a clean markdown table using the `|` delimiter.
-- Return ONLY markdown tables. Do not include any explanations, code blocks, or notes.
-- If no table is found, return exactly: No table found.
+Your job is to:
+- Identify any **repeated patterns or aligned values** that represent structured tabular data (even if the original table structure is missing).
+- Reconstruct it as a **clean markdown table** using the `|` character to separate columns.
+- If headers are missing, **infer them** from context (e.g., "Metric", "Current Period", "Previous Period").
+- Return **only the markdown table** — no explanations, code blocks, or commentary.
+- If nothing in the text resembles structured tabular data, return exactly: `No table found`
 
 Text:
 {page_text}
